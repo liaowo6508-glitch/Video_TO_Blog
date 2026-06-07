@@ -140,18 +140,24 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 快速开始（命令行）
 
-只需一条命令传入视频 URL，其余全部自动处理：
+启动后进入持续等待输入模式，直接输入视频 URL 即可：
 
 ```bash
-python run.py "https://www.bilibili.com/video/BV1xfczzgEsR"
+python run.py
 ```
 
-输出示例：
+输入示例：
 
 ```
+请输入视频 URL，提交后会继续等待下一条输入。
+输入 exit、quit、按 Ctrl+D，或按 Ctrl+C 可退出。
+URL > https://www.bilibili.com/video/BV1xfczzgEsR
 任务已创建: task_id=a1b2c3d4-...  status=pending
 查询命令: curl http://127.0.0.1:8000/tasks/a1b2c3d4-...
+URL >
 ```
+
+退出方式：`exit` / `quit` / `Ctrl+D` / `Ctrl+C`
 
 ## API 示例
 ### 查看支持的流水线
@@ -159,10 +165,11 @@ python run.py "https://www.bilibili.com/video/BV1xfczzgEsR"
 curl http://127.0.0.1:8000/pipelines
 ```
 
-### 创建视频转博客任务（直接传入 URL）
+### 创建视频转博客任务（命令行交互）
 
 ```bash
-python run.py "https://www.bilibili.com/video/BV1xfczzgEsR"
+python run.py
+# 启动后输入视频 URL 并回车，支持连续提交多个
 ```
 
 ### 创建视频转博客任务（curl，手动构造 JSON）
