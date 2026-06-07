@@ -1,0 +1,13 @@
+langgraph
+langchain-core
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-dotenv
+yt-dlp
+ffmpeg-python
+groq
+openai
+httpx
+openai-whisper

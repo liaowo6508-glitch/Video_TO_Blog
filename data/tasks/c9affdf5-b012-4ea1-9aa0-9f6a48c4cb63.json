@@ -1,0 +1,25 @@
+{
+  "task_id": "c9affdf5-b012-4ea1-9aa0-9f6a48c4cb63",
+  "video_url": "https://www.bilibili.com/video/BV1Y6Ec6zEYY/?spm_id_from=333.1007.tianma.5-1-15.click",
+  "pipeline_type": "video_to_blog",
+  "created_at": "2026-06-06T08:11:32.406445+00:00",
+  "updated_at": "2026-06-06T08:11:46.607878+00:00",
+  "video_id": "BV1Y6Ec6zEYY",
+  "task_dir": "c9affdf5-b012-4ea1-9aa0-9f6a48c4cb63_20260606_081132",
+  "video_title": "（二次补档）删一遍我发一遍,什么叫传播不实信息,有录像还捂嘴?(仍未封禁)",
+  "has_subtitle": false,
+  "status": "failed",
+  "error": "\u001b[0;31mERROR:\u001b[0m Postprocessing: ffprobe and ffmpeg not found. Please install or provide the path using --ffmpeg-location",
+  "node_results": {
+    "ingest": {
+      "video_title": "（二次补档）删一遍我发一遍,什么叫传播不实信息,有录像还捂嘴?(仍未封禁)",
+      "video_id": "BV1Y6Ec6zEYY"
+    },
+    "subtitle": {
+      "has_subtitle": false,
+      "subtitle_path": null,
+      "downloaded": []
+    }
+  },
+  "subtitle_path": null
+}

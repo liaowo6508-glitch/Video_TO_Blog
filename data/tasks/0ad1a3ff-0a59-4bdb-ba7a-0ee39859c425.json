@@ -1,0 +1,11 @@
+{
+  "task_id": "0ad1a3ff-0a59-4bdb-ba7a-0ee39859c425",
+  "video_url": "https://www.bilibili.com/video/BV1Y6Ec6zEYY/?spm_id_from=333.1007.tianma.5-1-15.click",
+  "pipeline_type": "video_to_blog",
+  "created_at": "2026-06-06T07:11:26.301936+00:00",
+  "updated_at": "2026-06-06T07:11:27.282129+00:00",
+  "status": "failed",
+  "error": "\u001b[0;31mERROR:\u001b[0m [BiliBili] 1Y6Ec6zEYY: Unable to download webpage: HTTP Error 412: Precondition Failed (caused by <HTTPError 412: Precondition Failed>)",
+  "node_results": {},
+  "has_subtitle": false
+}

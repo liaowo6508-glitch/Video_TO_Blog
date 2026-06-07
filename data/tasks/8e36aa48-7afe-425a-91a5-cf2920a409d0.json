@@ -1,0 +1,12 @@
+{
+  "task_id": "8e36aa48-7afe-425a-91a5-cf2920a409d0",
+  "video_url": "https://www.bilibili.com/video/BV1Y6Ec6zEYY/?spm_id_from=333.1007.tianma.5-1-15.click",
+  "pipeline_type": "video_to_blog",
+  "created_at": "2026-06-06T08:02:28.301003+00:00",
+  "updated_at": "2026-06-06T08:02:28.301003+00:00",
+  "status": "pending",
+  "error": null,
+  "node_results": {},
+  "has_subtitle": false,
+  "task_dir": "8e36aa48-7afe-425a-91a5-cf2920a409d0_20260606_080228"
+}

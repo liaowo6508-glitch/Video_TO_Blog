@@ -1,0 +1,25 @@
+{
+  "task_id": "62dae09f-bb41-4098-9efd-f38a982a5ccc",
+  "video_url": "https://www.bilibili.com/video/BV1Y6Ec6zEYY/?spm_id_from=333.1007.tianma.5-1-15.click",
+  "pipeline_type": "video_to_blog",
+  "created_at": "2026-06-06T08:33:50.333416+00:00",
+  "updated_at": "2026-06-06T08:37:14.872563+00:00",
+  "video_id": "BV1Y6Ec6zEYY",
+  "task_dir": "20260606_163350_62dae09f-bb41-4098-9efd-f38a982a5ccc",
+  "video_title": "（二次补档）删一遍我发一遍,什么叫传播不实信息,有录像还捂嘴?(仍未封禁)",
+  "has_subtitle": false,
+  "status": "failed",
+  "error": "Request timed out.",
+  "node_results": {
+    "ingest": {
+      "video_title": "（二次补档）删一遍我发一遍,什么叫传播不实信息,有录像还捂嘴?(仍未封禁)",
+      "video_id": "BV1Y6Ec6zEYY"
+    },
+    "subtitle": {
+      "has_subtitle": false,
+      "subtitle_path": null,
+      "downloaded": []
+    }
+  },
+  "subtitle_path": null
+}

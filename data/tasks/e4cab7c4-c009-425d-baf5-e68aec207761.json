@@ -1,0 +1,11 @@
+{
+  "task_id": "e4cab7c4-c009-425d-baf5-e68aec207761",
+  "video_url": "https://www.bilibili.com/video/BV1Y6Ec6zEYY/?spm_id_from=333.1007.tianma.5-1-15.click",
+  "pipeline_type": "video_to_blog",
+  "created_at": "2026-06-06T07:35:42.340408+00:00",
+  "updated_at": "2026-06-06T07:35:45.811446+00:00",
+  "status": "failed",
+  "error": "'dict' object has no attribute 'replace'",
+  "node_results": {},
+  "has_subtitle": false
+}
