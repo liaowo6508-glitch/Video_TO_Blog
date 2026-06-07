@@ -38,36 +38,44 @@ flowchart TD
         H["ASRNode<br/>语音转写"]
         I["LLMNode<br/>内容生成"]
         J["StorageNode<br/>存储/索引"]
+        S["PublishPrepareNode<br/>发布准备"]
     end
 
     subgraph 工具层["工具层（可插拔）"]
         K["yt-dlp"]
         L["ffmpeg"]
-        M["Local Whisper / Groq"]
+        M["Local Whisper"]
         N["DeepSeek / Gemini"]
         O["ChromaDB"]
+    end
+
+    subgraph 平台适配层["平台适配层（独立组件）"]
+        P1["CSDN Formatter<br/>front matter剥离 / 元数据提取"]
+        P2["CSDN Publisher<br/>浏览器自动发布"]
     end
 
     subgraph 存储层["存储层"]
         P["PostgreSQL<br/>(任务状态)"]
         Q["Redis<br/>(消息队列)"]
-        R["本地文件系统<br/>(音视频/字幕)"]
+        R["本地文件系统<br/>(音视频/字幕/博客)"]
     end
 
     A --> B
     B --> D
     D --> E
-    E --> F & G & H & I & J
+    E --> F & G & H & I & J & S
     F --> K
     G --> L
     H --> M
     I --> N
     J --> O
-    F & G & H & I & J --> P & Q & R
+    S --> P1 --> P2
+    F & G & H & I & J & S --> P & Q & R
 
     style 调度层 fill:#e3f2fd,stroke:#1565c0
     style 节点层 fill:#e8f5e9,stroke:#2e7d32
     style 工具层 fill:#fff3e0,stroke:#ef6c00
+    style 平台适配层 fill:#f3e5f5,stroke:#7b1fa2
 ```
 
 ### 2.2 核心执行流程
@@ -79,6 +87,7 @@ sequenceDiagram
     participant Scheduler as Celery
     participant Engine as LangGraph Engine
     participant Nodes as Nodes Registry
+    participant Adapter as Platform Adapter
     participant Storage as PostgreSQL
 
     User->>API: POST /tasks {pipeline, input_url}
@@ -93,11 +102,25 @@ sequenceDiagram
     Engine->>Storage: 更新任务状态
     Engine-->>Scheduler: 执行完成
 
+    opt 启用平台发布
+        Scheduler->>Adapter: prepare_publish(platform=csdn)
+        Adapter->>Adapter: 剥离 front matter / 提取标题摘要标签
+        Adapter->>Adapter: 生成平台可直接消费的正文内容
+        Adapter-->>Scheduler: publish payload
+    end
+
     User->>API: GET /tasks/{task_id}
     API->>Storage: 查询状态
     Storage-->>API: 任务状态 + 结果
     API-->>User: 博客内容
 ```
+
+### 2.3 平台适配原则
+
+- **内容生成层保持平台无关**：LLM 继续输出标准 Markdown，不为 CSDN 单独改写提示词。
+- **平台差异下沉到适配层**：例如 CSDN 所需的标题、标签、摘要、分类专栏等字段，由独立组件处理。
+- **适配器只做发布准备，不反向污染正文**：正文作为通用 Markdown 保留，适配器仅剥离 front matter、提取元数据、必要时裁剪不兼容信息。
+- **发布与生成解耦**：即使自动发布失败，`data/blogs/` 中的 Markdown 结果仍然可直接复用。
 
 ---
 
@@ -178,7 +201,7 @@ class PipelineState(TypedDict, total=False):
 # nodes/asr.py
 # 仅在无字幕时执行
 # 使用 yt-dlp 下载 bestaudio，并通过 FFmpegExtractAudio 转成 wav
-# 再调用 Groq Whisper 转写，写入 audio_path / transcript / source_text
+# 再调用本地 Whisper 转写，写入 audio_path / transcript / source_text
 
 # nodes/llm.py
 # 优先使用 transcript；若不存在则读取 subtitle_path 对应文本
@@ -188,6 +211,34 @@ class PipelineState(TypedDict, total=False):
 # 将博客 Markdown 落盘到 data/blogs/<YYYY-MM-DD>_<文章标题>.md
 # 文件名格式：<日期>_<文章标题>.md，标题从 LLM 生成内容中提取
 # 写入 output_path，并标记任务成功
+
+# nodes/publish_prepare.py  # 规划新增
+# 不改写 LLM 提示词，不修改原始 Markdown 内容目标
+# 负责读取 output_path 对应 markdown，剥离 front matter
+# 提取 title / description / tags / categories / image 等发布元数据
+# 为下游平台适配器生成 publish payload
+```
+
+### 4.3 平台适配组件（规划新增）
+
+```python
+# adapters/csdn_formatter.py
+# 输入：标准 markdown 文件
+# 输出：CSDN 发布所需 payload
+# 职责：
+#   1. 剥离 YAML front matter
+#   2. 提取 title / tags / description / image / categories
+#   3. 保留正文 markdown 原样，不为 CSDN 特意改写内容风格
+#   4. 输出 body/title/summary/tags 等结构化结果
+
+# adapters/csdn_publisher.py
+# 输入：formatter 产出的 publish payload
+# 输出：发布结果（如 draft_url / article_url / publish_status）
+# 职责：
+#   1. 打开已登录的 CSDN 编辑页
+#   2. 填充标题、正文、标签、摘要、专栏、可见范围
+#   3. 提交发布或保存草稿
+#   4. 将结果回写任务状态
 ```
 
 ### 4.4 当前产物落盘约定
@@ -207,6 +258,10 @@ def should_skip_asr(state: PipelineState) -> str:
     """字幕存在则跳过 ASR，节省 15-20 分钟"""
     return "asr_node" if not state.get("skip_asr") else "llm_node"
 
+def should_publish_platform(state: PipelineState) -> str:
+    """启用平台发布时进入发布准备节点，否则直接结束"""
+    return "publish_prepare" if state.get("publish_target") == "csdn" else END
+
 def build_video_to_blog_graph():
     graph = StateGraph(PipelineState)
     graph.add_node("ingest", ingest_node)
@@ -214,16 +269,18 @@ def build_video_to_blog_graph():
     graph.add_node("asr", asr_node)
     graph.add_node("llm", llm_node)
     graph.add_node("storage", storage_node)
+    graph.add_node("publish_prepare", publish_prepare_node)  # 规划新增
 
     graph.add_edge("ingest", "subtitle")
     graph.add_conditional_edges("subtitle", should_skip_asr)
     graph.add_edge("llm", "storage")
-    graph.add_edge("storage", END)
+    graph.add_conditional_edges("storage", should_publish_platform)
+    graph.add_edge("publish_prepare", END)
 
     return graph.compile()
 ```
 
-### 4.4 流水线注册机制（核心扩展点）
+### 4.6 流水线注册机制（核心扩展点）
 
 ```python
 # engine/registry.py
@@ -259,7 +316,7 @@ def yt_to_podcast_pipeline() -> StateGraph:
     ...
 ```
 
-### 4.5 服务工厂（工具可替换）
+### 4.7 服务工厂（工具可替换）
 
 ```python
 # tools/asr_factory.py
@@ -268,7 +325,6 @@ class ASRServiceFactory:
     def get(service: str):
         services = {
             "local_whisper": LocalWhisperASR(),  # 默认，选首后不需要外网
-            "groq": GroqASRService(),  # 备用，需配置 ASR_PROVIDER=groq
         }
         return services[service]
 
@@ -299,6 +355,7 @@ app = FastAPI(title="AI Pipeline Platform")
 class TaskRequest(BaseModel):
     pipeline: str              # "video_to_blog" | "video_to_summary" | ...
     input_url: str
+    publish_target: str | None = None  # 发布目标平台，如 "csdn"；None 则仅生成博客不发布
     config: dict = {}          # 可选参数覆盖
 
 class TaskResponse(BaseModel):
@@ -308,7 +365,7 @@ class TaskResponse(BaseModel):
 
 @app.post("/tasks")
 def create_task(req: TaskRequest) -> TaskResponse:
-    task_id = schedule_task(req.pipeline, req.input_url, req.config)
+    task_id = schedule_task(req.pipeline, req.input_url, req.config, req.publish_target)
     return TaskResponse(task_id=task_id, status="pending", created_at=datetime.now())
 
 @app.get("/tasks/{task_id}")
@@ -325,7 +382,7 @@ def list_pipelines() -> list[str]:
 ## 六、目录结构
 
 ```
-ai_platform/
+AI_project_talking_about/
 ├── api/                    # FastAPI 网关
 │   └── routes/
 │       ├── tasks.py        # 任务 CRUD
@@ -339,7 +396,11 @@ ai_platform/
 │   ├── subtitle.py        # 字幕处理
 │   ├── asr.py             # 语音转写
 │   ├── llm.py             # 内容生成
-│   └── storage.py         # 存储/索引
+│   ├── storage.py         # 存储/索引
+│   └── publish_prepare.py # 发布准备（规划新增）
+├── adapters/               # 平台适配层（规划新增）
+│   ├── csdn_formatter.py  # CSDN front matter 剥离 / 元数据提取
+│   └── csdn_publisher.py  # CSDN 浏览器自动发布
 ├── tools/                  # 底层工具封装（可插拔）
 │   ├── yt_dlp_tool.py
 │   ├── ffmpeg_tool.py
@@ -364,32 +425,32 @@ ai_platform/
 
 ```mermaid
 flowchart TD
-    P1["Phase 1<br/>框架搭建"] --> P2["Phase 2<br/>video_to_blog"]
-    P2 --> P3["Phase 3<br/>多流水线扩展"]
+    P1["Phase 1<br/>框架搭建 ✅"] --> P2["Phase 2<br/>video_to_blog ✅"]
+    P2 --> P3["Phase 3<br/>多流水线扩展 🔄"]
     P3 --> P4["Phase 4<br/>调度增强"]
     P4 --> P5["Phase 5<br/>多 Agent"]
 
     P1 -.- T1["LangGraph 骨架<br/>State/Node 接口规范"]
     P2 -.- T2["完整视频→博客流程<br/>首个可用流水线"]
-    P3 -.- T3["summary / tweets 等<br/>可扩展性验证"]
+    P3 -.- T3["summary / tweets / CSDN发布<br/>可扩展性验证"]
     P4 -.- T4["Celery 异步<br/>WebSocket / 重试"]
     P5 -.- T5["多 Agent 协作<br/>工具调用增强"]
 
-    style P1 fill:#e3f2fd
-    style P2 fill:#c8e6c9
-    style P3 fill:#fff9c4
+    style P1 fill:#c8e6c9,stroke:#2e7d32
+    style P2 fill:#c8e6c9,stroke:#2e7d32
+    style P3 fill:#fff9c4,stroke:#f9a825
     style P4 fill:#ffccbc
     style P5 fill:#f3e5f5
 ```
 
-| 阶段 | 内容 | 预计代码量 |
-|------|------|-----------|
-| Phase 1 | LangGraph + FastAPI 骨架，State / Node 接口规范 | ~300 行 |
-| Phase 2 | 完整 video_to_blog 流水线，通过注册接入 | ~500 行 |
-| Phase 3 | 注册 2-3 个新流水线（summary / tweets 等）| ~200 行 |
-| Phase 4 | Celery 异步、WebSocket 推送、任务重试 | ~400 行 |
-| Phase 5 | 多 Agent 协作流水线 | ~300 行 |
-| **合计** | | **~1700 行** |
+|| 阶段 | 状态 | 内容 | 预计代码量 |
+||------|------|------|-----------|
+|| Phase 1 | ✅ 完成 | LangGraph + FastAPI 骨架，State / Node 接口规范 | ~300 行 |
+|| Phase 2 | ✅ 完成 | 完整 video_to_blog 流水线，通过注册接入 | ~500 行 |
+|| Phase 3 | 🔄 进行中 | 注册 2-3 个新流水线（summary / tweets / CSDN发布）| ~200 行 |
+|| Phase 4 | 📋 待开始 | Celery 异步、WebSocket 推送、任务重试 | ~400 行 |
+|| Phase 5 | 📋 未来 | 多 Agent 协作流水线 | ~300 行 |
+|| **合计** | | | **~1700 行** |
 
 ---
 
@@ -405,12 +466,8 @@ flowchart TD
 | 方案 | 费用 | 速度 | 推荐度 |
 |------|------|------|--------|
 | **本地 Whisper small（CPU）**| ¥0 | 12-20分钟/30分钟 | ⭐⭐⭐ 首选（已默认启用）|
-| Groq Whisper API | 免费 | < 30秒/30分钟 | ⭐⭐ 备用（网络不稳定时降级）|
 | SiliconFlow FunAudioLLM | ¥0.1/分钟 | 快 | ⭐ 备用 |
 
-> ⚠️ **Groq Whisper API 存在网络调用不稳定性，已切换为本地 Whisper 作为默认 ASR 方案。**
-> 如需恢复 Groq，在 `.env` 中设置 `ASR_PROVIDER=groq` 即可。
-> Groq 注册地址：https://console.groq.com
 
 **i5-12500H CPU 转写性能预估：**
 - tiny：2-4 分钟（精度差，不推荐）
@@ -444,6 +501,7 @@ flowchart TD
     subgraph 规划中["🔄 规划中"]
         V2S["video_to_summary<br/>视频 → 摘要"]
         V2T["video_to_tweets<br/>视频 → 推文"]
+        CSDN["csdn_publish<br/>博客 → CSDN发布"]
     end
 
     subgraph 未来["📋 未来扩展"]
@@ -452,10 +510,13 @@ flowchart TD
         DOC["doc_to_knowledge<br/>文档 → 知识库"]
     end
 
+    V2B --> CSDN
     V2B & V2S & V2T --> Y2P
     Y2P --> M2B
     M2B --> DOC
 ```
+
+> **说明**：`csdn_publish` 不是独立流水线，而是 `video_to_blog` 的可选后处理阶段。通过 API 的 `publish_target: "csdn"` 参数触发，自动执行 `publish_prepare` 节点 + CSDN 平台适配器。
 
 ---
 
@@ -473,7 +534,7 @@ pie title 月度成本构成（¥3-8/月）
 |------|------|--------|
 | 视频下载 | yt-dlp + B站 cookies | ¥0 |
 | 音频处理 | ffmpeg | ¥0 |
-| 语音转写 | Groq（免费）+ 本地降级 | ¥0 |
+| 语音转写 | 本地 Whisper | ¥0 |
 | LLM 生成 | DeepSeek V4-Flash | ¥3-8 |
 | 向量存储 | ChromaDB 本地 | ¥0 |
 | 存储 | 本地 SSD | ¥0 |
@@ -506,9 +567,6 @@ curl https://api.deepseek.com/chat/completions \
     "messages": [{"role": "user", "content": "你好"}]
   }'
 
-# 5. Groq Whisper API 测试（如已注册）
-from groq import Groq
-client = Groq(api_key="your-key")
 
 # 6. 确认 LangGraph 可用（平台核心依赖）
 python -c "from langgraph.graph import StateGraph; print('LangGraph OK')"
@@ -518,7 +576,7 @@ python -c "from langgraph.graph import StateGraph; print('LangGraph OK')"
 
 ## 十二、技术限制说明
 
-- **DeepSeek V4 无 ASR 能力**：是纯文本 LLM，语音转文字必须依赖独立 ASR 服务（如 Whisper/Groq）
+- **DeepSeek V4 无 ASR 能力**：是纯文本 LLM，语音转文字必须依赖独立 ASR 服务（如本地 Whisper）
 - **B站字幕获取**：约 20-30% 视频有字幕，知识区成功率更高，建议优先尝试再降级
 - **分P视频**：需解析后按集逐一处理
 - **B站下载认证**：高画质下载需要 SESSDATA（从手机 App 登录获取）

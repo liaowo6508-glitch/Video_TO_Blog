@@ -30,6 +30,12 @@ class PipelineState(TypedDict, total=False):
     article_title: str | None
     output_path: str | None
 
+    publish_target: str | None
+    publish_status: str | None
+    publish_url: str | None
+    publish_payload: dict[str, Any] | None
+    publish_mode: str | None
+
     has_subtitle: bool
     status: PipelineStatus
     error: str | None

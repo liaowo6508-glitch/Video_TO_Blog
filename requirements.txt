@@ -8,7 +8,6 @@ python-dotenv
 pyyaml
 yt-dlp
 ffmpeg-python
-groq
 openai
 httpx
 openai-whisper

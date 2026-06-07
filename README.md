@@ -7,11 +7,27 @@
 - `video_to_blog` 流水线注册机制
 - `ingest(metadata) -> subtitle -> asr -> llm -> storage` 节点链路
 - 字幕存在时自动跳过 ASR
-- 优先下载字幕文本，无字幕时使用本地 Whisper 转写（Groq 为备用）
+- 优先下载字幕文本，无字幕时使用本地 Whisper 转写
 - FastAPI 接口：创建任务、查看任务、列出流水线
 - 任务执行日志：节点阶段、任务状态、失败原因
 - `yt-dlp` 下载进度映射到服务终端日志，便于观测音频下载状态
 - 本地 JSON 任务存储与 Markdown 结果落盘
+
+## 平台发布（技术储备）
+
+CSDN 发布能力已作为技术储备实现，代码位于：
+
+- `adapters/csdn_formatter.py`：从 Markdown 提取 title / tags / summary，生成 CSDN payload
+- `adapters/csdn_publisher.py`：生成发布 instructions 及可选的 automation_spec
+- `nodes/publish_prepare.py`：LangGraph 发布准备节点
+- `adapters/csdn_publisher.py` 中的 `_build_browser_automation_spec` 包含完整的浏览器自动化操作规范
+
+以上文件均已注释保留，启用路线图见各文件顶部注释。
+
+**核心设计原则**：
+- 保持 LLM 输出为平台无关的标准 Markdown
+- 在 Markdown 落盘后引入独立的平台适配组件
+- `csdn_publisher` 负责浏览器自动化发布，不反向影响内容生成提示词
 
 ## 目录结构
 ```text
@@ -21,6 +37,7 @@ AI_project_talking_about/
 ├── engine/
 ├── models/
 ├── nodes/
+├── adapters/        # 平台适配层（技术储备：CSDN 发布）
 ├── pipelines/
 ├── storage/
 ├── tools/
@@ -59,7 +76,6 @@ sudo apt install -y ffmpeg
 
 ```bash
 DEEPSEEK_API_KEY=your_deepseek_api_key
-GROQ_API_KEY=optional_groq_api_key_for_backup
 BILIBILI_SESSDATA=optional_bilibili_sessdata
 BILIBILI_COOKIE_FILE=optional_path_to_cookies_txt
 BILIBILI_NO_PROXY=false
@@ -69,19 +85,18 @@ DEEPSEEK_MODEL=deepseek-chat
 PROMPT_CONFIG_PATH=optional_path_to_prompts_yaml  # 默认 config/prompts.yaml
 ASR_PROVIDER=local_whisper       # 默认：本地 Whisper，不需要外网
 LOCAL_WHISPER_MODEL=small        # 可选：tiny/base/small/medium/large-v3
-GROQ_MODEL=whisper-large-v3-turbo  # 仅当 ASR_PROVIDER=groq 时生效
 FFMPEG_LOCATION=optional_path_to_ffmpeg_bin_dir_or_binary
 ```
 
 说明：
 - `DEEPSEEK_API_KEY`：用于博客内容生成。
-- `GROQ_API_KEY`：可选，仅在 `ASR_PROVIDER=groq` 时才需要，用于云端 Whisper ASR（备用方案）。
-- `ASR_PROVIDER`：默认为 `local_whisper`（本地转写，不需要外网）。设为 `groq` 可切换为云端方案。
+- `ASR_PROVIDER`：固定为 `local_whisper`（本地转写，不需要外网）。
 - `LOCAL_WHISPER_MODEL`：本地 Whisper 模型规模，影响精度和速度，`small` 为推荐默认值。
 - `BILIBILI_SESSDATA`：部分 B站 视频下载或高质量访问时需要，可选。
 - `BILIBILI_COOKIE_FILE`：优先于 `BILIBILI_SESSDATA`，推荐填写浏览器导出的 Netscape `cookies.txt` 文件路径。
 - `BILIBILI_NO_PROXY`：设为 `true` 时，`yt-dlp` 将不使用当前 shell 里的代理环境变量，适合排查 B站 `412` 或代理拦截问题。
 - `FFMPEG_LOCATION`：可选，指向 `ffmpeg/ffprobe` 所在目录，或可执行文件路径，用于 `yt-dlp` 后处理阶段定位二进制。
+- `CSDN_EDITOR_URL` / `CSDN_AUTO_PUBLISH`：**技术储备**，已注释在 `config/settings.py` 中，启用时取消注释即可。
 
 ## 启动服务
 ```bash

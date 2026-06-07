@@ -12,6 +12,7 @@ class TaskRequest(BaseModel):
     pipeline: str = Field(..., description="Pipeline name, e.g. video_to_blog")
     input_url: str | None = None
     video_url: str | None = None
+    publish_target: str | None = Field(default=None, description="Publish target platform, e.g. 'csdn'")
     config: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -50,5 +51,10 @@ class TaskRead(BaseModel):
     source_text: str | None = None
     blog_content: str | None = None
     output_path: str | None = None
+    publish_target: str | None = None
+    publish_status: str | None = None
+    publish_url: str | None = None
+    publish_mode: str | None = None
+    publish_payload: dict[str, Any] = Field(default_factory=dict)
     has_subtitle: bool = False
     node_results: dict[str, Any] = Field(default_factory=dict)

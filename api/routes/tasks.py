@@ -12,8 +12,18 @@ task_store = TaskStore()
 runner = PipelineRunner(task_store=task_store)
 
 
-def _run_pipeline_task(task_id: str, pipeline: str, input_url: str) -> None:
-    runner.run(pipeline=pipeline, video_url=input_url, task_id=task_id)
+def _run_pipeline_task(
+    task_id: str,
+    pipeline: str,
+    input_url: str,
+    publish_target: str | None,
+) -> None:
+    runner.run(
+        pipeline=pipeline,
+        video_url=input_url,
+        task_id=task_id,
+        publish_target=publish_target,
+    )
 
 
 @router.post("", response_model=TaskResponse)
@@ -21,13 +31,18 @@ def create_task(req: TaskRequest, background_tasks: BackgroundTasks) -> TaskResp
     if req.pipeline not in PipelineRegistry.list_names():
         raise HTTPException(status_code=404, detail="Unknown pipeline")
 
-    initial_state = runner.create_initial_state(req.pipeline, req.get_url())
+    initial_state = runner.create_initial_state(
+        req.pipeline,
+        req.get_url(),
+        publish_target=req.publish_target,
+    )
     task_store.save(initial_state)
     background_tasks.add_task(
         _run_pipeline_task,
         initial_state["task_id"],
         req.pipeline,
         req.get_url(),
+        req.publish_target,
     )
 
     return TaskResponse(

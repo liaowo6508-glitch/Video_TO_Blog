@@ -15,7 +15,11 @@ class PipelineRunner:
         self.task_store = task_store or TaskStore()
 
     def create_initial_state(
-        self, pipeline: str, video_url: str, task_id: str | None = None
+        self,
+        pipeline: str,
+        video_url: str,
+        task_id: str | None = None,
+        publish_target: str | None = None,
     ) -> PipelineState:
         timestamp = datetime.now(timezone.utc).isoformat()
         task_id = task_id or str(uuid4())
@@ -29,13 +33,27 @@ class PipelineRunner:
             error=None,
             node_results={},
             has_subtitle=False,
+            publish_target=publish_target,
+            publish_status=None,
+            publish_url=None,
+            publish_payload=None,
+            publish_mode=None,
             task_dir=f"{settings.beijing_now().strftime('%Y%m%d_%H%M%S')}_{task_id}",
         )
 
     def run(
-        self, pipeline: str, video_url: str, task_id: str | None = None
+        self,
+        pipeline: str,
+        video_url: str,
+        task_id: str | None = None,
+        publish_target: str | None = None,
     ) -> PipelineState:
-        state = self.create_initial_state(pipeline, video_url, task_id=task_id)
+        state = self.create_initial_state(
+            pipeline,
+            video_url,
+            task_id=task_id,
+            publish_target=publish_target,
+        )
         self.task_store.save(state)
         set_task_context(state["task_id"])
         task_log("[%s] 任务已创建 pipeline=%s", state["task_id"], pipeline)

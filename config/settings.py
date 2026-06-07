@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     groq_api_key: str | None = None
     deepseek_api_key: str | None = None
     bilibili_sessdata: str | None = None
+    # csdn_editor_url: str = "https://editor.csdn.net/mdeditor"       # [CSDN发布-技术储备]
+    # csdn_auto_publish: bool = False                                   # [CSDN发布-技术储备]
 
     prompt_config_path: Path | None = Field(
         default=None,

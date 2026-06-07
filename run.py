@@ -5,26 +5,35 @@
 
 用法:
     python run.py "https://www.bilibili.com/video/BV1xx411c7mD"
+    python run.py "https://www.bilibili.com/video/BV1xx411c7mD" --publish csdn
+
+环境变量:
+    CSDN_AUTO_PUBLISH=true  # 生成自动发布 automation_spec
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
+import urllib.error
 import urllib.request
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="创建 video_to_blog 任务")
+    parser.add_argument("video_url", help="视频 URL")
+    # [CSDN发布-技术储备] --publish csdn 参数保留于此，待启用时取消注释
+    return parser.parse_args()
+
+
 def main() -> None:
-    if len(sys.argv) != 2:
-        print(f"用法: python {sys.argv[0]} <视频URL>")
-        sys.exit(1)
-
-    video_url: str = sys.argv[1]
-    payload: dict = {
+    args = parse_args()
+    payload: dict[str, object] = {
         "pipeline": "video_to_blog",
-        "input_url": video_url,
+        "input_url": args.video_url,
     }
-
+    # [CSDN发布-技术储备] publish_target 透传保留于此，待启用时取消注释并加入上方 payload 构建
     body_bytes: bytes = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         "http://127.0.0.1:8000/tasks",
