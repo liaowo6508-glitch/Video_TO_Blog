@@ -27,6 +27,7 @@ class PipelineState(TypedDict, total=False):
     transcript: str | None
     source_text: str | None
     blog_content: str | None
+    article_title: str | None
     output_path: str | None
 
     has_subtitle: bool

@@ -2,10 +2,30 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import re
 from pathlib import Path
 
 from config.settings import settings
 from engine.state import PipelineState
+
+
+def _sanitize_filename(name: str) -> str:
+    """移除文件名中的非法字符，保留中文、字母、数字、空格（替换为空格）"""
+    return re.sub(r"[\\/:*?\"<>|]", "", name).strip()
+
+
+def _safe_filename(name: str, max_len: int = 60) -> str:
+    """将标题转换为安全的文件名，超长截断"""
+    safe = _sanitize_filename(name)
+    if len(safe) > max_len:
+        safe = safe[:max_len]
+    return safe
+
+
+def _extract_article_title(blog_content: str) -> str | None:
+    """从 Markdown 内容的第一行一级标题中提取文章标题"""
+    match = re.search(r"^#\s+(.+)\s*$", blog_content, re.MULTILINE)
+    return match.group(1).strip() if match else None
 
 
 class TaskStore:
@@ -35,8 +55,26 @@ class TaskStore:
             tasks.append(json.loads(path.read_text(encoding="utf-8")))
         return tasks
 
-    def create_result_file(self, task_id: str, content: str) -> str:
-        output_path = settings.resolve_path(settings.results_dir) / f"{task_id}.md"
+    def create_result_file(
+        self,
+        task_id: str,
+        content: str,
+        article_title: str | None = None,
+        created_at: str | None = None,
+    ) -> str:
+        blogs_dir = settings.resolve_path(settings.blogs_dir)
+        blogs_dir.mkdir(parents=True, exist_ok=True)
+
+        title = article_title or _extract_article_title(content)
+        ts = created_at[:10] if created_at else settings.beijing_now().strftime("%Y-%m-%d")
+
+        if title:
+            safe_title = _safe_filename(title)
+            filename = f"{ts}_{safe_title}.md"
+        else:
+            filename = f"{ts}_{task_id}.md"
+
+        output_path = blogs_dir / filename
         output_path.write_text(content, encoding="utf-8")
         return str(output_path)
 

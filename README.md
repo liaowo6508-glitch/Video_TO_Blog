@@ -170,8 +170,12 @@ curl http://127.0.0.1:8000/tasks/<task_id>
 
 ## 数据输出
 - 任务状态：`data/tasks/<task_id>.json`
-- 博客结果：`data/results/<task_id>.md`
-- 音视频资源：`data/video_down/<task_dir>/`
+- 博客文章：`data/blogs/<YYYY-MM-DD>_<文章标题>.md`
+  - 文件命名格式：`<日期>_<文章标题>.md`，例如 `2026-06-07_深入理解LangGraph状态机.md`
+  - 标题从 LLM 生成的内容中自动提取（取 Markdown 正文第一个 `# ` 一级标题）
+  - 标题中非法字符（`\/:*?"<>|`）会自动去除
+  - 若提取失败，文件名格式降级为 `<YYYY-MM-DD>_<task_id>.md`
+- 字幕/音频资源：`data/video_down/<task_dir>/`
   - 字幕文件或音频 wav 均保存在任务专属文件夹下
   - 文件夹命名格式：`<YYYYMMDD_HHMMSS>_<task_id>`
 - 视频元信息：保存在任务状态 JSON 中

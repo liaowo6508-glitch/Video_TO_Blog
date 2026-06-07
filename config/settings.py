@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     audio_dir: Path = Field(default_factory=lambda: Path("data/audio"))
     subtitles_dir: Path = Field(default_factory=lambda: Path("data/subtitles"))
     results_dir: Path = Field(default_factory=lambda: Path("data/results"))
+    blogs_dir: Path = Field(default_factory=lambda: Path("data/blogs"))
     tasks_dir: Path = Field(default_factory=lambda: Path("data/tasks"))
 
     yt_dlp_format: str = "bv*+ba/b"
@@ -66,6 +67,7 @@ class Settings(BaseSettings):
             self.audio_dir,
             self.subtitles_dir,
             self.results_dir,
+            self.blogs_dir,
             self.tasks_dir,
         ]:
             (self.workspace_dir / path).mkdir(parents=True, exist_ok=True)

@@ -12,7 +12,12 @@ def storage_node(state: PipelineState) -> PipelineState:
     if not blog_content:
         raise ValueError("No blog content available to store")
 
-    output_path = task_store.create_result_file(state["task_id"], blog_content)
+    output_path = task_store.create_result_file(
+        task_id=state["task_id"],
+        content=blog_content,
+        article_title=state.get("article_title"),
+        created_at=state.get("created_at"),
+    )
     task_log("[%s] 结果文件已写入: %s", state["task_id"], output_path)
     return {
         **state,

@@ -154,6 +154,7 @@ class PipelineState(TypedDict, total=False):
     transcript: str | None
     source_text: str | None
     blog_content: str | None
+    article_title: str | None
     output_path: str | None
 
     has_subtitle: bool
@@ -184,14 +185,15 @@ class PipelineState(TypedDict, total=False):
 # 调用 DeepSeek 生成结构化中文博客，写入 blog_content
 
 # nodes/storage.py
-# 将博客 Markdown 落盘到 data/results/<task_id>.md
+# 将博客 Markdown 落盘到 data/blogs/<YYYY-MM-DD>_<文章标题>.md
+# 文件名格式：<日期>_<文章标题>.md，标题从 LLM 生成内容中提取
 # 写入 output_path，并标记任务成功
 ```
 
 ### 4.4 当前产物落盘约定
 
 - 任务状态：`data/tasks/<task_id>.json`
-- 博客结果：`data/results/<task_id>.md`
+- 博客结果：`data/blogs/<YYYY-MM-DD>_<文章标题>.md`
 - 音频/字幕等中间资源：`data/video_down/<task_dir>/`
 - `task_dir` 命名格式：`<YYYYMMDD_HHMMSS>_<task_id>`
 - 若字幕节点已成功，相关 `subtitle_path` / `has_subtitle` 会立即持久化，即使后续节点失败也会保留
