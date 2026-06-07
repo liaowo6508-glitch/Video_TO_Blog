@@ -8,7 +8,16 @@ from config.settings import settings
 
 class LLMService(ABC):
     @abstractmethod
-    def generate(self, prompt: str, system: str | None = None) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system: Optional[str] = None,
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        json_mode: bool = False,
+        json_schema: Optional[str] = None,
+    ) -> str:
         ...
 
 
@@ -27,17 +36,50 @@ class DeepSeekLLMService(LLMService):
         )
         self.model = model or settings.deepseek_model
 
-    def generate(self, prompt: str, system: str | None = None) -> str:
+    def generate(
+        self,
+        prompt: str,
+        system: Optional[str] = None,
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        json_mode: bool = False,
+        json_schema: Optional[str] = None,
+    ) -> str:
         if not settings.deepseek_api_key:
             raise EnvironmentError("DEEPSEEK_API_KEY is not set")
+
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-        )
+
+        # 构造带 JSON schema 或 few-shot 的 user prompt
+        if json_mode and json_schema:
+            user_content = (
+                f"{prompt}\n\n"
+                f"请严格按照以下 JSON Schema 输出，不要包含任何额外文字：\n"
+                f"```json\n{json_schema}\n```"
+            )
+        elif json_mode:
+            user_content = (
+                f"{prompt}\n\n"
+                "请严格按照 JSON 格式输出，不要包含任何额外文字。"
+            )
+        else:
+            user_content = prompt
+
+        messages.append({"role": "user", "content": user_content})
+
+        kwargs: dict[str, object] = {
+            "model": self.model,
+            "messages": messages,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+
+        response = self.client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""
 
 

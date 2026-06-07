@@ -5,6 +5,7 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 python-dotenv
+pyyaml
 yt-dlp
 ffmpeg-python
 groq

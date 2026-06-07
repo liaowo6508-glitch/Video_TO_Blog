@@ -66,6 +66,7 @@ BILIBILI_NO_PROXY=false
 APP_HOST=0.0.0.0
 APP_PORT=8000
 DEEPSEEK_MODEL=deepseek-chat
+PROMPT_CONFIG_PATH=optional_path_to_prompts_yaml  # 默认 config/prompts.yaml
 ASR_PROVIDER=local_whisper       # 默认：本地 Whisper，不需要外网
 LOCAL_WHISPER_MODEL=small        # 可选：tiny/base/small/medium/large-v3
 GROQ_MODEL=whisper-large-v3-turbo  # 仅当 ASR_PROVIDER=groq 时生效
@@ -179,6 +180,61 @@ curl http://127.0.0.1:8000/tasks/<task_id>
 - 即使任务最终状态为 `failed`，已成功下载的字幕等中间产物仍会保留在 `data/video_down/<task_dir>/` 中。
 - `data/tasks/<task_id>.json` 会尽量保留已经完成节点的中间结果，例如 `subtitle_path`、`has_subtitle` 和 `node_results.subtitle`。
 - 因此请同时查看任务状态和任务目录，不要仅凭最终 `failed` 判断“没有任何产物”。
+
+## 提示词配置
+
+LLM 节点的 system prompt、user prompt 模板和输出格式均可通过 YAML 配置文件热调整，无需修改代码。
+
+### 配置文件位置
+
+默认：`config/prompts.yaml`
+
+可通过以下方式指定自定义路径（优先级从高到低）：
+
+1. `PROMPT_CONFIG_PATH` 环境变量
+2. `settings.prompt_config_path`（`.env` 中配置）
+3. 默认 `config/prompts.yaml`
+
+### 配置项说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `system_prompt` | string | System prompt，定义 LLM 角色与核心要求 |
+| `user_template` | string | User prompt 模板，支持 `{video_title}`、`{video_url}`、`{source_text}` 占位符 |
+| `output_format.type` | `markdown` \| `json` | LLM 输出格式 |
+| `output_format.schema` | string \| null | JSON Schema 描述（仅 `type=json` 时生效） |
+| `temperature` | float | 生成温度，0.0-2.0 |
+| `max_tokens` | int \| null | 最大生成长度，null 表示不限制 |
+
+### 示例：切换为 JSON 输出
+
+编辑 `config/prompts.yaml`：
+
+```yaml
+output_format:
+  type: json
+  schema: |
+    {
+      "title": "string",
+      "summary": "string",
+      "sections": [{"heading": "string", "content": "string"}],
+      "tags": ["string"]
+    }
+```
+
+### 示例：调整 System Prompt
+
+```yaml
+system_prompt: |
+  你是一名科技博主。请用轻松幽默的语言将视频内容改写成一篇通俗易懂的技术博客。
+  要求：
+  1. 标题有吸引力，能引发好奇心。
+  2. 内容深入浅出，避免过于专业的术语。
+  3. 使用 Markdown 格式。
+  4. 结尾附加"延伸阅读"小节。
+```
+
+配置修改后，下次任务执行时自动生效，无需重启服务。
 
 ## 执行逻辑
 1. `ingest`：仅抓取视频标题、视频 ID 等元信息，不下载完整视频。

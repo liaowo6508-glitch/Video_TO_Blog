@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     deepseek_api_key: str | None = None
     bilibili_sessdata: str | None = None
 
+    prompt_config_path: Path | None = Field(
+        default=None,
+        description=(
+            "提示词配置文件路径（支持相对路径，相对于 workspace_dir）。"
+            "若为 None，优先从环境变量 PROMPT_CONFIG_PATH 读取；"
+            "若也未设置，默认使用 config/prompts.yaml。"
+        ),
+    )
+
     def beijing_now(self):
         return __import__("datetime").datetime.now(ZoneInfo("Asia/Shanghai"))
 
