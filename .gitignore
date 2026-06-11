@@ -4,4 +4,4 @@ data/results/
 __pycache__/
 .cursor/
 data/video_down/
-data/tasks/*.js
+data/tasks/*.json

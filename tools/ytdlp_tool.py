@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse, urlencode, parse_qs
 
 import yt_dlp
 from yt_dlp.utils import DownloadError
@@ -11,11 +14,49 @@ from config.settings import settings
 from monitor import make_progress_hook, task_log
 
 
+def _strip_bilibili_tracking_params(url: str) -> str:
+    """去掉 B站 URL 中的来源追踪参数，返回纯净视频 URL。"""
+    parsed = urlparse(url)
+    if parsed.netloc not in {"www.bilibili.com", "bilibili.com"}:
+        return url
+
+    match = re.match(r"^/video/([Bb][Vv]\w+)", parsed.path)
+    if not match:
+        return url
+
+    clean_path = f"/video/{match.group(1)}"
+    return f"{parsed.scheme}://{parsed.netloc}{clean_path}"
+
+
+def _is_412_error(exc: Exception) -> bool:
+    """判断异常是否由 B站 412 引起。"""
+    msg = str(exc)
+    return "412" in msg and ("Bilibili" in msg or "[BiliBili]" in msg)
+
+
 class YtDlpTool:
     def __init__(self, output_dir: Path | None = None) -> None:
         self.output_dir = settings.resolve_path(
             output_dir or settings.video_down_dir
         )
+
+    def cleanup_old_task_dirs(self, max_keep: int) -> int:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if max_keep < 0:
+            max_keep = 0
+
+        task_dirs = sorted(
+            (path for path in self.output_dir.iterdir() if path.is_dir()),
+            key=lambda path: path.name,
+            reverse=True,
+        )
+
+        removed = 0
+        for path in task_dirs[max_keep:]:
+            shutil.rmtree(path, ignore_errors=True)
+            task_log("🗑️ 清理过期视频目录: %s", path.name)
+            removed += 1
+        return removed
 
     def _build_base_options(
         self, *, quiet: bool, skip_download: bool
@@ -63,6 +104,19 @@ class YtDlpTool:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False) or {}
+        except Exception as exc:
+            import traceback
+            task_log("extract_info 异常: type=%s msg=%s", type(exc).__name__, str(exc)[:200])
+            if _is_412_error(exc):
+                clean_url = _strip_bilibili_tracking_params(url)
+                task_log("412 拦截，尝试纯净 URL: %s", clean_url)
+                try:
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        return ydl.extract_info(clean_url, download=False) or {}
+                except Exception:
+                    task_log("纯净 URL 重试仍失败:\n%s", traceback.format_exc())
+                    raise
+            raise
         finally:
             if cookie_path and should_delete:
                 os.unlink(cookie_path)

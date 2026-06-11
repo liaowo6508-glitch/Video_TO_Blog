@@ -12,6 +12,8 @@
 - 任务执行日志：节点阶段、任务状态、失败原因
 - `yt-dlp` 下载进度映射到服务终端日志，便于观测音频下载状态
 - 本地 JSON 任务存储与 Markdown 结果落盘
+- B站 URL 412 自动裁剪重试，无需人工处理追踪参数
+- `video_down` 目录自动保留策略，仅保留最近 N 个任务目录
 
 ## 平台发布（技术储备）
 
@@ -86,6 +88,7 @@ PROMPT_CONFIG_PATH=optional_path_to_prompts_yaml  # 默认 config/prompts.yaml
 ASR_PROVIDER=local_whisper       # 默认：本地 Whisper，不需要外网
 LOCAL_WHISPER_MODEL=small        # 可选：tiny/base/small/medium/large-v3
 FFMPEG_LOCATION=optional_path_to_ffmpeg_bin_dir_or_binary
+VIDEO_DOWN_MAX_KEEP=5            # video_down 最多保留最近 N 个任务目录
 ```
 
 说明：
@@ -96,7 +99,15 @@ FFMPEG_LOCATION=optional_path_to_ffmpeg_bin_dir_or_binary
 - `BILIBILI_COOKIE_FILE`：优先于 `BILIBILI_SESSDATA`，推荐填写浏览器导出的 Netscape `cookies.txt` 文件路径。
 - `BILIBILI_NO_PROXY`：设为 `true` 时，`yt-dlp` 将不使用当前 shell 里的代理环境变量，适合排查 B站 `412` 或代理拦截问题。
 - `FFMPEG_LOCATION`：可选，指向 `ffmpeg/ffprobe` 所在目录，或可执行文件路径，用于 `yt-dlp` 后处理阶段定位二进制。
+- `VIDEO_DOWN_MAX_KEEP`：可选，控制 `data/video_down/` 最多保留多少个最近任务目录，默认 `5`。每次创建新任务前会自动清理更早的目录。
 - `CSDN_EDITOR_URL` / `CSDN_AUTO_PUBLISH`：**技术储备**，已注释在 `config/settings.py` 中，启用时取消注释即可。
+
+### B站 412 自动重试机制
+B站视频 URL 中常携带来源追踪参数（`?spm_id_from=...&vd_source=...`），可能触发 HTTP 412 拦截。
+系统会在 `extract_info` 阶段自动拦截该错误，并将 URL 裁剪为纯净格式（`https://www.bilibili.com/video/BV...`）后重试一次，全程无需人工干预。
+若仍失败，则按正常流程抛出错误，可检查 cookies 配置或稍后再试。
+
+> **实现细节**：异常匹配同时兼容 `Bilibili`（无括号）和 `[BiliBili]`（有括号）两种格式，确保不同版本 yt-dlp 输出的错误消息均能被正确拦截。
 
 ## 启动服务
 ```bash
@@ -183,7 +194,6 @@ curl -X POST http://127.0.0.1:8000/tasks \
 ```
 
 > **注意**：JSON 中不要有换行或制表符等控制字符，否则返回 422 `JSON decode error: Invalid control character`。建议直接使用上方的 `run.py` 脚本。
-```
 
 ### 查询任务状态
 ```bash
@@ -200,12 +210,13 @@ curl http://127.0.0.1:8000/tasks/<task_id>
 - 字幕/音频资源：`data/video_down/<task_dir>/`
   - 字幕文件或音频 wav 均保存在任务专属文件夹下
   - 文件夹命名格式：`<YYYYMMDD_HHMMSS>_<task_id>`
+  - 系统默认仅保留最近 `5` 个任务目录；每次创建新任务前会自动清理更早目录，可通过 `VIDEO_DOWN_MAX_KEEP` 调整
 - 视频元信息：保存在任务状态 JSON 中
 
 ### 失败任务的中间产物
-- 即使任务最终状态为 `failed`，已成功下载的字幕等中间产物仍会保留在 `data/video_down/<task_dir>/` 中。
+- 即使任务最终状态为 `failed`，已成功下载的字幕等中间产物仍会先保留在 `data/video_down/<task_dir>/` 中。
 - `data/tasks/<task_id>.json` 会尽量保留已经完成节点的中间结果，例如 `subtitle_path`、`has_subtitle` 和 `node_results.subtitle`。
-- 因此请同时查看任务状态和任务目录，不要仅凭最终 `failed` 判断“没有任何产物”。
+- 但 `data/video_down/` 会在后续新任务创建时按保留策略自动清理旧目录，因此历史任务如需长期留存，请及时转移对应资源文件。
 
 ## 提示词配置
 
