@@ -121,8 +121,12 @@ def discover_new_videos(
     processed_video_ids: list[str] | None = None,
     max_items: int = 10,
 ) -> tuple[list[VideoItem], str | None]:
-    """拉取 UP 主最新视频，返回新增的视频列表（基于持久化 video store 去重），
-    并更新 sub 中的 last_check_at / last_video_at / processed_video_ids。"""
+    """拉取 UP 主最新视频，返回新增的视频列表。
+
+    去重权威来源：VideoStore（data/videos/<uid>.json）。
+    processed_video_ids / last_video_at 参数仅用于兼容旧订阅记录，
+    不再参与去重逻辑。sub 中的对应字段会在本次执行后同步更新。
+    """
     video_store = VideoStore()
     persisted: list[VideoItem] = video_store.load(creator_uid)
     persisted_bvids: set[str] = {v.bvid for v in persisted}

@@ -18,12 +18,15 @@ class VideoStore:
     def _path(self, creator_uid: str) -> Path:
         return self.base_dir / f"{creator_uid}.json"
 
-    def load(self, creator_uid: str) -> list[VideoItem]:
-        """加载指定 UP 主的已发现视频列表，按 pubdate 降序。"""
+    def _load_raw(self, creator_uid: str) -> list[dict]:
         path = self._path(creator_uid)
         if not path.exists():
             return []
-        raw: list[dict] = json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def load(self, creator_uid: str) -> list[VideoItem]:
+        """加载指定 UP 主的已发现视频列表，按 pubdate 降序。"""
+        raw = self._load_raw(creator_uid)
         videos = [VideoItem(**v) for v in raw]
         videos.sort(key=lambda v: v.pubdate, reverse=True)
         return videos
@@ -38,7 +41,7 @@ class VideoStore:
 
     def upsert(self, creator_uid: str, new_videos: list[VideoItem]) -> list[VideoItem]:
         """将新视频合并到已有列表，按 pubdate 降序返回完整列表。"""
-        existing = {v.bvid: v for v in self.load(creator_uid)}
+        existing = {v.bvid: v for v in self._load_raw(creator_uid)}
         for v in new_videos:
             existing[v.bvid] = v
         merged = sorted(existing.values(), key=lambda v: v.pubdate, reverse=True)
