@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     results_dir: Path = Field(default_factory=lambda: Path("data/results"))
     blogs_dir: Path = Field(default_factory=lambda: Path("data/blogs"))
     tasks_dir: Path = Field(default_factory=lambda: Path("data/tasks"))
+    subscriptions_dir: Path = Field(default_factory=lambda: Path("data/subscriptions"))
+    videos_dir: Path = Field(default_factory=lambda: Path("data/videos"))
+    bilibili_api_timeout: int = 30
 
     yt_dlp_format: str = "bv*+ba/b"
     yt_dlp_user_agent: str = (
@@ -65,6 +68,7 @@ class Settings(BaseSettings):
             self.results_dir,
             self.blogs_dir,
             self.tasks_dir,
+            self.subscriptions_dir,
         ]:
             (self.workspace_dir / path).mkdir(parents=True, exist_ok=True)
 

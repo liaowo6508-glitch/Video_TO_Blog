@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 import pipelines  # noqa: F401
+from api.routes.subscriptions import router as subscriptions_router
 from api.routes.tasks import router as tasks_router
 from engine.registry import PipelineRegistry
 
@@ -34,6 +35,7 @@ async def validation_exception_handler(
         content={"detail": exc.errors()},
     )
 app.include_router(tasks_router)
+app.include_router(subscriptions_router)
 
 
 @app.get("/pipelines", response_model=list[str])

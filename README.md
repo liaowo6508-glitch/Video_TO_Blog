@@ -17,6 +17,49 @@
 - `video_down` 目录自动保留策略，仅保留最近 N 个任务目录
 - `subtitle_only` 流水线：仅下载并清洗字幕，返回文档地址（默认流水线）
 
+## 订阅与发现系统
+
+系统支持对 B站 UP 主进行订阅，自动发现并追踪其最新视频。
+
+### 订阅管理 API
+```bash
+# 订阅 UP 主
+curl -X POST http://127.0.0.1:8000/subscriptions \
+  -H "Content-Type: application/json" \
+  -d '{"creator_uid": "3546588567833451", "creator_name": "七哥"}'
+
+# 查看所有订阅
+curl http://127.0.0.1:8000/subscriptions
+
+# 手动发现单个 UP 主新视频
+curl -X POST "http://127.0.0.1:8000/subscriptions/3546588567833451/discover?max_items=10"
+
+# 自动发现所有订阅 UP 主新视频
+curl -X POST "http://127.0.0.1:8000/subscriptions/discover-all?max_items=10"
+```
+
+### 视频持久化存储
+
+每次 discover 到的视频完整信息（标题、链接、播放量、封面、发布时间）会写入 `data/videos/<uid>.json`，作为去重和新视频判断的权威来源。即使订阅记录被清除，视频历史仍可追溯。
+
+数据字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `bvid` | string | B站视频 BV 号 |
+| `title` | string | 视频标题 |
+| `pubdate` | int | 发布时间戳（秒） |
+| `duration` | string | 时长 |
+| `play` | int \| null | 播放量 |
+| `pic` | string \| null | 封面图 URL |
+| `video_url` | string | 视频链接 |
+
+### B站 WBI 签名与 Cookie
+
+discover 通过 yt-dlp 调用 B站 space 页，利用其内置 WBI 签名处理（需完整 cookie：BUVID3 + BILI_JCT + SESSDATA）。
+
+优先使用 `BILIBILI_COOKIE_FILE`（浏览器导出的 Netscape 格式 cookies.txt），其次使用 `BILIBILI_SESSDATA`。
+
 ## 平台发布（技术储备）
 
 CSDN 发布能力已作为技术储备实现，代码位于：
@@ -43,7 +86,9 @@ AI_project_talking_about/
 ├── nodes/
 ├── adapters/        # 平台适配层（技术储备：CSDN 发布）
 ├── pipelines/
-├── storage/
+├── storage/       # 持久化存储层（SubscriptionStore / VideoStore）
+│   ├── subscription_store.py  # 订阅记录存储
+│   └── video_store.py         # 视频列表存储（支持 upsert 合并去重）
 ├── tools/
 ├── data/
 ├── requirements.txt
@@ -243,6 +288,11 @@ curl http://127.0.0.1:8000/tasks/<task_id>
 ```
 
 ## 数据输出
+- 订阅记录：`data/subscriptions/<uid>.json`
+  - 记录每个 UP 主的订阅信息、最后检查时间、已处理视频 ID 列表
+- 已发现视频：`data/videos/<uid>.json`
+  - 每次 discover 的完整视频信息持久化存储，包含标题、链接、播放量、封面、发布时间
+  - 支持 upsert 合并去重，同一 UP 主多次 discover 不会重复记录
 - 任务状态：`data/tasks/<task_id>.json`
 - 博客文章：`data/blogs/<YYYY-MM-DD>_<文章标题>.md`
   - 文件命名格式：`<日期>_<文章标题>.md`，例如 `2026-06-07_深入理解LangGraph状态机.md`
