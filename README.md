@@ -167,13 +167,13 @@ python run.py -p 9000 -H 192.168.1.100
 > `run.py` 支持以下参数：
 > - `-p, --port PORT` 服务器端口号 (默认: 8000)
 > - `-H, --host HOST` 服务器地址 (默认: 127.0.0.1)
-> - `--pipeline PIPELINE` 流水线名称 (默认: subtitle_only)
+> - `--pipeline PIPELINE` 流水线名称 (默认: video_to_blog)
 >   - `subtitle_only`: 仅下载并清洗字幕，返回文档地址
 >   - `video_to_blog`: 完整视频转博客流程
 > - `--poll` 提交后自动轮询直到任务完成，并输出文档地址
 > - `-h, --help` 显示帮助信息
 
-### subtitle_only 流水线（默认）
+### subtitle_only 流水线
 
 ```bash
 python run.py --pipeline subtitle_only
@@ -184,7 +184,7 @@ python run.py --pipeline subtitle_only
 - 文件创建时间由文件系统自带属性记录，文件名不重复包含时间戳，避免冗余
 - 支持 `--poll` 自动轮询直到完成
 
-### video_to_blog 流水线
+### video_to_blog 流水线（默认）
 
 ```bash
 python run.py --pipeline video_to_blog

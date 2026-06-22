@@ -53,10 +53,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--pipeline",
         type=str,
-        default="subtitle_only",
+        default="video_to_blog",
         dest="pipeline",
         choices=["subtitle_only", "video_to_blog"],
-        help="流水线名称 (默认: subtitle_only)",
+        help="流水线名称 (默认: video_to_blog)",
     )
     parser.add_argument(
         "--poll",
