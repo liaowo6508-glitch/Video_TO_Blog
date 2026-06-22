@@ -8,10 +8,9 @@ from pathlib import Path
 from urllib.parse import urlparse, urlencode, parse_qs
 
 import yt_dlp
-from yt_dlp.utils import DownloadError
 
 from config.settings import settings
-from monitor import make_progress_hook, task_log
+from monitor import task_log
 
 
 def _strip_bilibili_tracking_params(url: str) -> str:
@@ -132,52 +131,6 @@ class YtDlpTool:
         finally:
             if cookie_path and should_delete:
                 os.unlink(cookie_path)
-
-    def download_audio_only(self, url: str, video_id: str, task_dir: str) -> str:
-        task_log("准备下载音频: video_id=%s task_dir=%s", video_id, task_dir)
-        base_dir = settings.resolve_path(settings.video_down_dir)
-        folder = base_dir / task_dir
-        folder.mkdir(parents=True, exist_ok=True)
-        outtmpl = str(folder / f"{video_id}.%(ext)s")
-
-        ydl_opts = self._build_base_options(quiet=False, skip_download=False)
-        ydl_opts.update(
-            {
-                "format": "bestaudio/best",
-                "outtmpl": outtmpl,
-                "progress_hooks": [make_progress_hook("audio", video_id)],
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": "wav",
-                    }
-                ],
-            }
-        )
-
-        cookie_path, should_delete = self._resolve_cookie_file()
-        if cookie_path:
-            ydl_opts["cookiefile"] = cookie_path
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                audio_path = str(Path(filename).with_suffix(".wav"))
-        except DownloadError as exc:
-            message = str(exc)
-            if "ffprobe and ffmpeg not found" in message:
-                hint = (
-                    "缺少 ffmpeg/ffprobe。请先安装 ffmpeg，"
-                    "或在 .env 中配置 FFMPEG_LOCATION 指向其可执行文件目录或二进制路径。"
-                )
-                raise RuntimeError(f"{hint} 原始错误: {message}") from exc
-            raise
-        finally:
-            if cookie_path and should_delete:
-                os.unlink(cookie_path)
-
-        return audio_path
 
     def download_subtitle_text(
         self, url: str, video_id: str, task_dir: str

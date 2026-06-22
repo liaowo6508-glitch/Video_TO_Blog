@@ -58,7 +58,7 @@ system_prompt: |
 # 占位符说明：
 #   {video_title}  - 视频标题（从元信息提取）
 #   {video_url}    - 视频链接
-#   {source_text}  - 字幕文本或 ASR 转写内容
+#   {source_text}  - 字幕文本（清洗后的纯字幕内容）
 user_template: |
   请将以下视频内容整理为一篇结构化中文博客文章。
 

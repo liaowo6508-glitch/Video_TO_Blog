@@ -1,13 +1,13 @@
 # AI Pipeline Platform
 
-基于 LangGraph 的智能任务编排平台 MVP。当前首版实现聚焦 `video_to_blog`：将 Bilibili 或通用视频链接下载、检测字幕、必要时进行 ASR 转写，并调用 DeepSeek 生成结构化中文博客文章。
+基于 LangGraph 的智能任务编排平台 MVP。当前首版实现聚焦 `video_to_blog`：将 Bilibili 或通用视频链接下载、检测字幕，并调用 DeepSeek 生成结构化中文博客文章。
 
 ## 已实现能力
 - LangGraph 状态机编排骨架
 - `video_to_blog` 流水线注册机制
-- `ingest(metadata) -> subtitle -> subtitle_clean -> asr -> llm -> storage` 节点链路
-- 字幕存在时自动跳过 ASR
-- 优先下载字幕文本，无字幕时使用本地 Whisper 转写
+- `ingest(metadata) -> subtitle -> subtitle_clean -> llm -> storage` 节点链路
+- 字幕不存在时直接报错（B站大部分视频至少有AI字幕）
+- 优先下载字幕文本
 - 统一字幕解析：使用 `subtitle_parser.py` 解析 SRT/VTT，生成不含时间戳的纯文本供 LLM 使用
 - FastAPI 接口：创建任务、查看任务、列出流水线
 - 任务执行日志：节点阶段、任务状态、失败原因
@@ -66,8 +66,6 @@ ffmpeg -version
 yt-dlp --version
 ```
 
-本地 Whisper 模型会在首次运行时自动下载。
-
 Ubuntu 示例：
 
 ```bash
@@ -87,16 +85,11 @@ APP_HOST=0.0.0.0
 APP_PORT=8000
 DEEPSEEK_MODEL=deepseek-v4-pro   # 可选: deepseek-v4-pro / deepseek-v4-flash
 # PROMPT_CONFIG_PATH=            # 自定义提示词路径，留空走 config/prompts.yaml
-ASR_PROVIDER=local_whisper        # 本地 Whisper 转写
-LOCAL_WHISPER_MODEL=small         # tiny/base/small/medium/large-v3
-# FFMPEG_LOCATION=                # 自定义 ffmpeg 路径
 VIDEO_DOWN_MAX_KEEP=5
 ```
 
 说明：
 - `DEEPSEEK_API_KEY`：用于博客内容生成。
-- `ASR_PROVIDER`：固定为 `local_whisper`（本地转写，不需要外网）。
-- `LOCAL_WHISPER_MODEL`：本地 Whisper 模型规模，影响精度和速度，`small` 为推荐默认值。
 - `BILIBILI_SESSDATA`：部分 B站 视频下载或高质量访问时需要，可选。
 - `BILIBILI_COOKIE_FILE`：优先于 `BILIBILI_SESSDATA`，推荐填写浏览器导出的 Netscape `cookies.txt` 文件路径。
 - `BILIBILI_NO_PROXY`：设为 `true` 时，`yt-dlp` 将不使用当前 shell 里的代理环境变量，适合排查 B站 `412` 或代理拦截问题。
@@ -130,22 +123,22 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 ### 日志覆盖范围
 - 任务创建、开始执行、成功完成、失败退出
-- 当前执行节点：`ingest` / `subtitle` / `asr` / `llm` / `storage`
-- 字幕是否命中、是否跳过 ASR
-- `yt-dlp` 音频下载进度：百分比、已下载大小、总大小、速度、ETA
+- 当前执行节点：`ingest` / `subtitle` / `subtitle_clean` / `llm` / `storage`
+- 字幕下载进度：百分比、已下载大小、总大小、速度、ETA
 
 ### 典型日志示例
 ```text
 [15:40:12] INFO [6d2f...] 任务已创建 pipeline=video_to_blog
 [15:40:12] INFO [6d2f...] 开始执行流水线
 [15:40:12] INFO [6d2f...] 进入 ingest：抓取元信息
-[15:40:13] INFO [6d2f...] 进入 subtitle：优先尝试字幕
-[15:40:14] INFO [6d2f...] 未获取到字幕，转入 ASR
-[15:40:14] INFO [6d2f...] 进入 asr：下载音频并转写
-[15:40:15] INFO [BV1Y6Ec6zEYY] ⬇ audio   23.4%  3.2MB/13.8MB  @ 1.1MB/s  ETA 9s
-[15:40:23] INFO [BV1Y6Ec6zEYY] ✅ audio 下载完成  →  /.../data/video_down/<YYYYMMDD_HHMMSS>_<task_id>/BV1Y6Ec6zEYY.wav  (8.1s)
-[15:40:31] INFO [6d2f...] ASR 完成，转写长度=12456
-[15:40:37] INFO [6d2f...] 任务成功完成
+[15:40:13] INFO [6d2f...] 进入 subtitle：尝试下载字幕
+[15:40:14] INFO [6d2f...] 字幕获取成功
+[15:40:14] INFO [6d2f...] 进入 subtitle_clean：清洗字幕时间戳
+[15:40:15] INFO [6d2f...] 字幕清洗完成，文本长度=12456
+[15:40:16] INFO [6d2f...] 进入 llm：生成博客
+[15:40:23] INFO [6d2f...] LLM 完成，内容长度=4096
+[15:40:24] INFO [6d2f...] 进入 storage：存储博客
+[15:40:25] INFO [6d2f...] 任务成功完成
 ```
 
 ### 建议的观测方式
@@ -191,7 +184,7 @@ python run.py --pipeline video_to_blog
 ```
 
 - 完整视频转博客流程（下载字幕 → 清洗字幕 → LLM 总结 → 存储博客）
-- 无字幕时自动切换为（下载音频 → ASR 转写 → LLM 总结 → 存储博客）
+- 字幕不可用时任务直接失败（B站大部分视频至少包含 AI 字幕）
 - 返回博客文档地址：`data/blogs/<date>_<title>.md`
 - 支持 `--poll` 自动轮询直到完成
 
@@ -346,12 +339,10 @@ system_prompt: |
 
 ## 执行逻辑
 1. `ingest`：仅抓取视频标题、视频 ID 等元信息，不下载完整视频。
-2. `subtitle`：优先下载现有字幕或自动字幕文本。
+2. `subtitle`：下载视频字幕或自动字幕文本；无字幕则任务失败。
 3. `subtitle_clean`：清洗字幕（解析 SRT/VTT 格式，移除时间戳，生成纯文本）。
-4. 若有字幕，直接进入 `llm`（使用清洗后的纯文本）。
-5. 若无字幕，进入 `asr`，仅下载音频并调用本地 Whisper 转写，然后进入 `llm`。
-6. `llm`：调用 DeepSeek 将清洗后的文本整理成博客。
-7. `storage`：把博客落盘并更新任务状态。
+4. `llm`：调用 DeepSeek 将清洗后的文本整理成博客。
+5. `storage`：把博客落盘并更新任务状态。
 
 > **字幕处理**：所有流水线统一使用 `subtitle_parser.py` 解析字幕，优先生成不含时间戳的纯文本，提升 LLM 阅读体验。可通过 `include_subtitle_time` 参数保留时间戳。
 

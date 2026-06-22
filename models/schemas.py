@@ -46,8 +46,6 @@ class TaskRead(BaseModel):
     video_title: str | None = None
     video_path: str | None = None
     subtitle_path: str | None = None
-    audio_path: str | None = None
-    transcript: str | None = None
     source_text: str | None = None
     blog_content: str | None = None
     output_path: str | None = None

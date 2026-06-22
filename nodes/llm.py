@@ -17,7 +17,7 @@ def _extract_article_title(blog_content: str) -> str | None:
 def llm_node(state: PipelineState) -> PipelineState:
     task_log("[%s] 进入 llm：生成博客", state["task_id"])
 
-    source_text = state.get("cleaned_subtitle_text") or state.get("transcript")
+    source_text = state.get("cleaned_subtitle_text")
     if not source_text and state.get("subtitle_path"):
         source_text = Path(state["subtitle_path"]).read_text(encoding="utf-8")
 

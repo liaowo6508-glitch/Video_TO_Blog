@@ -7,7 +7,5 @@ pydantic-settings
 python-dotenv
 pyyaml
 yt-dlp
-ffmpeg-python
 openai
 httpx
-openai-whisper

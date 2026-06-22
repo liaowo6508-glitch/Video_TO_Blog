@@ -23,8 +23,6 @@ class PipelineState(TypedDict, total=False):
     video_title: str
     video_path: str | None
     subtitle_path: str | None
-    audio_path: str | None
-    transcript: str | None
     source_text: str | None
     blog_content: str | None
     article_title: str | None

@@ -35,7 +35,6 @@ flowchart TD
     subgraph 节点层["节点层（可复用）"]
         F["IngestNode<br/>内容摄入"]
         G["SubtitleNode<br/>字幕处理"]
-        H["ASRNode<br/>语音转写"]
         I["LLMNode<br/>内容生成"]
         J["StorageNode<br/>存储/索引"]
         S["PublishPrepareNode<br/>发布准备"]
@@ -43,8 +42,6 @@ flowchart TD
 
     subgraph 工具层["工具层（可插拔）"]
         K["yt-dlp"]
-        L["ffmpeg"]
-        M["Local Whisper"]
         N["DeepSeek / Gemini"]
         O["ChromaDB"]
     end
@@ -63,14 +60,12 @@ flowchart TD
     A --> B
     B --> D
     D --> E
-    E --> F & G & H & I & J & S
+    E --> F & G & I & J & S
     F --> K
-    G --> L
-    H --> M
     I --> N
     J --> O
     S --> P1 --> P2
-    F & G & H & I & J & S --> P & Q & R
+    F & G & I & J & S --> P & Q & R
 
     style 调度层 fill:#e3f2fd,stroke:#1565c0
     style 节点层 fill:#e8f5e9,stroke:#2e7d32
@@ -97,7 +92,7 @@ sequenceDiagram
 
     Scheduler->>Engine: 执行流水线
     Engine->>Nodes: 依次调用节点
-    Engine->>Nodes: ingest → subtitle → asr/llm → storage
+    Engine->>Nodes: ingest → subtitle → subtitle_clean → llm → storage
     Nodes-->>Engine: 返回 state 更新
     Engine->>Storage: 更新任务状态
     Engine-->>Scheduler: 执行完成
@@ -141,7 +136,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     A["为什么选 LangGraph？"] --> B["状态机模型<br/>节点间数据流转自然"]
-    A --> C["条件分支<br/>字幕有/无自动分流"]
+    A --> C["条件分支<br/>字幕不存在则报错"]
     A --> D["可持久化<br/>中断后可恢复"]
     A --> E["生态完整<br/>LangSmith 监控 + Tracing"]
     A --> F["演进平滑<br/>多 Agent / RAG / Tool Calling 叠加"]
@@ -173,8 +168,6 @@ class PipelineState(TypedDict, total=False):
     video_title: str
     video_path: str | None
     subtitle_path: str | None
-    audio_path: str | None
-    transcript: str | None
     source_text: str | None
     blog_content: str | None
     article_title: str | None
@@ -194,17 +187,13 @@ class PipelineState(TypedDict, total=False):
 # 写入 video_id / video_title / node_results.ingest
 
 # nodes/subtitle.py
-# 优先下载现有字幕或自动字幕
+# 下载视频字幕或自动字幕文本
 # 若成功则写入 subtitle_path、has_subtitle=True
 # 并立即持久化任务状态，避免后续失败时丢失中间结果
-
-# nodes/asr.py
-# 仅在无字幕时执行
-# 使用 yt-dlp 下载 bestaudio，并通过 FFmpegExtractAudio 转成 wav
-# 再调用本地 Whisper 转写，写入 audio_path / transcript / source_text
+# 若无字幕则抛出 RuntimeError（系统依赖视频自带的字幕或 AI 字幕）
 
 # nodes/llm.py
-# 优先使用 transcript；若不存在则读取 subtitle_path 对应文本
+# 读取 subtitle_path 对应的清洗后纯文本
 # 调用 DeepSeek 生成结构化中文博客，写入 blog_content
 
 # nodes/storage.py
@@ -254,10 +243,6 @@ class PipelineState(TypedDict, total=False):
 ```python
 from langgraph.graph import StateGraph, END
 
-def should_skip_asr(state: PipelineState) -> str:
-    """字幕存在则跳过 ASR，节省 15-20 分钟"""
-    return "asr_node" if not state.get("skip_asr") else "llm_node"
-
 def should_publish_platform(state: PipelineState) -> str:
     """启用平台发布时进入发布准备节点，否则直接结束"""
     return "publish_prepare" if state.get("publish_target") == "csdn" else END
@@ -266,13 +251,14 @@ def build_video_to_blog_graph():
     graph = StateGraph(PipelineState)
     graph.add_node("ingest", ingest_node)
     graph.add_node("subtitle", subtitle_node)
-    graph.add_node("asr", asr_node)
+    graph.add_node("subtitle_clean", subtitle_clean_node)
     graph.add_node("llm", llm_node)
     graph.add_node("storage", storage_node)
     graph.add_node("publish_prepare", publish_prepare_node)  # 规划新增
 
     graph.add_edge("ingest", "subtitle")
-    graph.add_conditional_edges("subtitle", should_skip_asr)
+    graph.add_edge("subtitle", "subtitle_clean")
+    graph.add_edge("subtitle_clean", "llm")
     graph.add_edge("llm", "storage")
     graph.add_conditional_edges("storage", should_publish_platform)
     graph.add_edge("publish_prepare", END)
@@ -319,15 +305,6 @@ def yt_to_podcast_pipeline() -> StateGraph:
 ### 4.7 服务工厂（工具可替换）
 
 ```python
-# tools/asr_factory.py
-class ASRServiceFactory:
-    @staticmethod
-    def get(service: str):
-        services = {
-            "local_whisper": LocalWhisperASR(),  # 默认，选首后不需要外网
-        }
-        return services[service]
-
 # tools/llm_factory.py
 class LLMServiceFactory:
     @staticmethod
@@ -394,7 +371,6 @@ AI_project_talking_about/
 ├── nodes/                  # 节点实现
 │   ├── ingest.py          # 内容摄入
 │   ├── subtitle.py        # 字幕处理
-│   ├── asr.py             # 语音转写
 │   ├── llm.py             # 内容生成
 │   ├── storage.py         # 存储/索引
 │   └── publish_prepare.py # 发布准备（规划新增）
@@ -403,8 +379,6 @@ AI_project_talking_about/
 │   └── csdn_publisher.py  # CSDN 浏览器自动发布
 ├── tools/                  # 底层工具封装（可插拔）
 │   ├── yt_dlp_tool.py
-│   ├── ffmpeg_tool.py
-│   ├── whisper_tool.py
 │   ├── deepseek_tool.py
 │   └── chromadb_tool.py
 ├── pipelines/              # 流水线定义
@@ -416,7 +390,7 @@ AI_project_talking_about/
 ├── models/                # 数据模型
 │   └── schemas.py
 └── config/
-    └── settings.py         # 服务配置（ASR/LLM 可切换）
+    └── settings.py         # 服务配置（LLM 可切换）
 ```
 
 ---
@@ -459,24 +433,9 @@ flowchart TD
 ### 8.1 视频处理
 
 - **yt-dlp**：从 B站下载视频/音频/字幕（注意：它不能替代 ffmpeg）
-- **ffmpeg**：音视频格式转换，输出 Whisper 所需的 16kHz 单声道 WAV
+- **ffmpeg**：音视频格式转换（yt-dlp 内部依赖）
 
-### 8.2 ASR 方案对比
-
-| 方案 | 费用 | 速度 | 推荐度 |
-|------|------|------|--------|
-| **本地 Whisper small（CPU）**| ¥0 | 12-20分钟/30分钟 | ⭐⭐⭐ 首选（已默认启用）|
-| SiliconFlow FunAudioLLM | ¥0.1/分钟 | 快 | ⭐ 备用 |
-
-
-**i5-12500H CPU 转写性能预估：**
-- tiny：2-4 分钟（精度差，不推荐）
-- base：5-8 分钟（一般）
-- **small：12-20 分钟（推荐，精度良好）**
-- medium：30-50 分钟（偏慢）
-- large-v3：60-100 分钟（CPU太慢，不考虑）
-
-### 8.3 LLM 方案
+### 8.2 LLM 方案
 
 | 模型 | 价格（/百万 tokens）| 适用场景 |
 |------|---------------------|----------|
@@ -485,9 +444,6 @@ flowchart TD
 | Gemini Flash 2.0 | 免费（有配额）| 备用、多模态扩展 |
 
 > DeepSeek V4 官方定价：https://api-docs.deepseek.com
->
-> ⚠️ **DeepSeek V4 是纯文本 LLM，不具备语音转文字（ASR）功能**
-
 ---
 
 ## 九、注册流水线一览
@@ -527,14 +483,13 @@ flowchart TD
 ```mermaid
 pie title 月度成本构成（¥3-8/月）
     "DeepSeek V4-Flash（LLM生成）" : 5
-    "视频下载 / 音频处理 / ASR / 存储" : 0
+    "视频下载 / 存储" : 0
 ```
 
 | 环节 | 方案 | 月成本 |
 |------|------|--------|
 | 视频下载 | yt-dlp + B站 cookies | ¥0 |
 | 音频处理 | ffmpeg | ¥0 |
-| 语音转写 | 本地 Whisper | ¥0 |
 | LLM 生成 | DeepSeek V4-Flash | ¥3-8 |
 | 向量存储 | ChromaDB 本地 | ¥0 |
 | 存储 | 本地 SSD | ¥0 |
@@ -548,17 +503,14 @@ pie title 月度成本构成（¥3-8/月）
 # 1. 确认 yt-dlp 能解析 B 站视频
 yt-dlp --list-subs "https://www.bilibili.com/video/BV1xx411c7mD"
 
-# 2. 确认 Whisper 可用
-python -c "import whisper; print('Whisper OK')"
-
-# 3. 确认 ffmpeg / ffprobe 可用
+# 2. 确认 ffmpeg / ffprobe 可用
 ffmpeg -version
 ffprobe -version
 
-# 4. 若未加入 PATH，可在 .env 中配置
+# 3. 若未加入 PATH，可在 .env 中配置
 # FFMPEG_LOCATION=/path/to/ffmpeg/bin
 
-# 5. 确认 DeepSeek API 可用
+# 4. 确认 DeepSeek API 可用
 curl https://api.deepseek.com/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
@@ -568,7 +520,7 @@ curl https://api.deepseek.com/chat/completions \
   }'
 
 
-# 6. 确认 LangGraph 可用（平台核心依赖）
+# 5. 确认 LangGraph 可用（平台核心依赖）
 python -c "from langgraph.graph import StateGraph; print('LangGraph OK')"
 ```
 
@@ -576,7 +528,7 @@ python -c "from langgraph.graph import StateGraph; print('LangGraph OK')"
 
 ## 十二、技术限制说明
 
-- **DeepSeek V4 无 ASR 能力**：是纯文本 LLM，语音转文字必须依赖独立 ASR 服务（如本地 Whisper）
+- **字幕依赖**：系统依赖视频自带的字幕或 AI 字幕，无字幕视频无法处理
 - **B站字幕获取**：约 20-30% 视频有字幕，知识区成功率更高，建议优先尝试再降级
 - **分P视频**：需解析后按集逐一处理
 - **B站下载认证**：高画质下载需要 SESSDATA（从手机 App 登录获取）

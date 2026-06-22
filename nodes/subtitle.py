@@ -7,7 +7,7 @@ from tools.ytdlp_tool import get_ytdlp_tool
 
 
 def subtitle_node(state: PipelineState) -> PipelineState:
-    task_log("[%s] 进入 subtitle：优先尝试字幕", state["task_id"])
+    task_log("[%s] 进入 subtitle：尝试下载字幕", state["task_id"])
     tool = get_ytdlp_tool()
     task_store = TaskStore()
 
@@ -32,9 +32,10 @@ def subtitle_node(state: PipelineState) -> PipelineState:
     }
     task_store.save(next_state)
 
-    if has_subtitle:
-        task_log("[%s] 字幕可用，跳过 ASR", state["task_id"])
-    else:
-        task_log("[%s] 未获取到字幕，转入 ASR", state["task_id"])
+    if not has_subtitle:
+        raise RuntimeError(
+            "无法获取字幕，请确认视频是否包含字幕或自动字幕。大部分视频至少有 AI 字幕，请检查视频是否可用。"
+        )
 
+    task_log("[%s] 字幕获取成功", state["task_id"])
     return next_state

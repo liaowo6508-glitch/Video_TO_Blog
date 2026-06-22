@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     workspace_dir: Path = Path(__file__).resolve().parent.parent
     data_dir: Path = Field(default_factory=lambda: Path("data"))
     video_down_dir: Path = Field(default_factory=lambda: Path("data/video_down"))
-    audio_dir: Path = Field(default_factory=lambda: Path("data/audio"))
     subtitles_dir: Path = Field(default_factory=lambda: Path("data/subtitles"))
     results_dir: Path = Field(default_factory=lambda: Path("data/results"))
     blogs_dir: Path = Field(default_factory=lambda: Path("data/blogs"))
@@ -37,14 +36,10 @@ class Settings(BaseSettings):
     bilibili_no_proxy: bool = False
     ffmpeg_binary: str = "ffmpeg"
     ffmpeg_location: str | None = None
-    asr_provider: str = "local_whisper"
-    local_whisper_model: str = "small"
-    groq_model: str = "whisper-large-v3-turbo"
     llm_provider: str = "deepseek"
     deepseek_model: str = "deepseek-v4-pro"  # DeepSeek V4 Preview: 1.6T/49B-active MoE, 1M context
     deepseek_base_url: str = "https://api.deepseek.com"
 
-    groq_api_key: str | None = None
     deepseek_api_key: str | None = None
     bilibili_sessdata: str | None = None
     # csdn_editor_url: str = "https://editor.csdn.net/mdeditor"       # [CSDN发布-技术储备]
@@ -66,7 +61,6 @@ class Settings(BaseSettings):
         for path in [
             self.data_dir,
             self.video_down_dir,
-            self.audio_dir,
             self.subtitles_dir,
             self.results_dir,
             self.blogs_dir,
