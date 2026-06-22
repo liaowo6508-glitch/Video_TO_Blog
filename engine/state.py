@@ -30,6 +30,10 @@ class PipelineState(TypedDict, total=False):
     article_title: str | None
     output_path: str | None
 
+    cleaned_subtitle_text: str | None
+    subtitle_document_path: str | None
+    include_subtitle_time: bool
+
     publish_target: str | None
     publish_status: str | None
     publish_url: str | None

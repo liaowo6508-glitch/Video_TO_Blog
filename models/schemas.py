@@ -51,6 +51,8 @@ class TaskRead(BaseModel):
     source_text: str | None = None
     blog_content: str | None = None
     output_path: str | None = None
+    subtitle_document_path: str | None = None
+    cleaned_subtitle_text: str | None = None
     publish_target: str | None = None
     publish_status: str | None = None
     publish_url: str | None = None

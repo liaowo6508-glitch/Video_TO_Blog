@@ -22,10 +22,11 @@ from nodes.ingest import ingest_node
 from nodes.llm import llm_node
 from nodes.storage import storage_node
 from nodes.subtitle import subtitle_node
+from nodes.subtitle_clean import subtitle_clean_node
 
 
 def route_after_subtitle(state: PipelineState) -> str:
-    return "llm" if state.get("has_subtitle") else "asr"
+    return "subtitle_clean" if state.get("has_subtitle") else "asr"
 
 
 @PipelineRegistry.register("video_to_blog")
@@ -33,6 +34,7 @@ def video_to_blog_pipeline():
     graph = StateGraph(PipelineState)
     graph.add_node("ingest", ingest_node)
     graph.add_node("subtitle", subtitle_node)
+    graph.add_node("subtitle_clean", subtitle_clean_node)
     graph.add_node("asr", asr_node)
     graph.add_node("llm", llm_node)
     graph.add_node("storage", storage_node)
@@ -43,10 +45,11 @@ def video_to_blog_pipeline():
         "subtitle",
         route_after_subtitle,
         {
-            "llm": "llm",
+            "subtitle_clean": "subtitle_clean",
             "asr": "asr",
         },
     )
+    graph.add_edge("subtitle_clean", "llm")
     graph.add_edge("asr", "llm")
     graph.add_edge("llm", "storage")
     graph.add_edge("storage", END)

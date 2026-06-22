@@ -5,15 +5,17 @@
 ## 已实现能力
 - LangGraph 状态机编排骨架
 - `video_to_blog` 流水线注册机制
-- `ingest(metadata) -> subtitle -> asr -> llm -> storage` 节点链路
+- `ingest(metadata) -> subtitle -> subtitle_clean -> asr -> llm -> storage` 节点链路
 - 字幕存在时自动跳过 ASR
 - 优先下载字幕文本，无字幕时使用本地 Whisper 转写
+- 统一字幕解析：使用 `subtitle_parser.py` 解析 SRT/VTT，生成不含时间戳的纯文本供 LLM 使用
 - FastAPI 接口：创建任务、查看任务、列出流水线
 - 任务执行日志：节点阶段、任务状态、失败原因
 - `yt-dlp` 下载进度映射到服务终端日志，便于观测音频下载状态
 - 本地 JSON 任务存储与 Markdown 结果落盘
 - B站 URL 412 自动裁剪重试，无需人工处理追踪参数
 - `video_down` 目录自动保留策略，仅保留最近 N 个任务目录
+- `subtitle_only` 流水线：仅下载并清洗字幕，返回文档地址（默认流水线）
 
 ## 平台发布（技术储备）
 
@@ -165,7 +167,33 @@ python run.py -p 9000 -H 192.168.1.100
 > `run.py` 支持以下参数：
 > - `-p, --port PORT` 服务器端口号 (默认: 8000)
 > - `-H, --host HOST` 服务器地址 (默认: 127.0.0.1)
+> - `--pipeline PIPELINE` 流水线名称 (默认: subtitle_only)
+>   - `subtitle_only`: 仅下载并清洗字幕，返回文档地址
+>   - `video_to_blog`: 完整视频转博客流程
+> - `--poll` 提交后自动轮询直到任务完成，并输出文档地址
 > - `-h, --help` 显示帮助信息
+
+### subtitle_only 流水线（默认）
+
+```bash
+python run.py --pipeline subtitle_only
+```
+
+- 仅下载字幕资源并清洗（抹除多余的视频时间信息，默认不保留时间戳）
+- 返回字幕文档地址：`data/subtitles/<视频标题>_<task_id>.txt`
+- 文件创建时间由文件系统自带属性记录，文件名不重复包含时间戳，避免冗余
+- 支持 `--poll` 自动轮询直到完成
+
+### video_to_blog 流水线
+
+```bash
+python run.py --pipeline video_to_blog
+```
+
+- 完整视频转博客流程（下载字幕 → 清洗字幕 → LLM 总结 → 存储博客）
+- 无字幕时自动切换为（下载音频 → ASR 转写 → LLM 总结 → 存储博客）
+- 返回博客文档地址：`data/blogs/<date>_<title>.md`
+- 支持 `--poll` 自动轮询直到完成
 
 输入示例：
 
@@ -193,6 +221,16 @@ curl http://127.0.0.1:8000/pipelines
 python run.py
 # 启动后输入视频 URL 并回车，支持连续提交多个
 ```
+
+### 创建字幕下载任务（curl，手动构造 JSON）
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"pipeline": "subtitle_only", "input_url": "https://www.bilibili.com/video/BV1xfczzgEsR"}'
+```
+
+返回的 `task_id` 可通过 `GET /tasks/<task_id>` 查询；成功后 `subtitle_document_path` 字段即为清洗后的字幕文档地址。
 
 ### 创建视频转博客任务（curl，手动构造 JSON）
 
@@ -222,6 +260,11 @@ curl http://127.0.0.1:8000/tasks/<task_id>
   - 字幕文件或音频 wav 均保存在任务专属文件夹下
   - 文件夹命名格式：`<YYYYMMDD_HHMMSS>_<task_id>`
   - 系统默认仅保留最近 `5` 个任务目录；每次创建新任务前会自动清理更早目录，可通过 `VIDEO_DOWN_MAX_KEEP` 调整
+- 字幕文档（`subtitle_only` 流水线）：`data/subtitles/<视频标题>_<task_id>.txt`
+  - 清洗后的字幕纯文本，抹除了多余的视频时间信息（默认不保留时间戳）
+  - 每行一段字幕文本，无序号的纯文本格式
+  - 文件名不含时间戳：创建时间由文件系统属性记录，task_id 放在标题之后，保证全局唯一
+  - 方便后续 LLM 处理或人工查阅
 - 视频元信息：保存在任务状态 JSON 中
 
 ### 失败任务的中间产物
@@ -304,10 +347,13 @@ system_prompt: |
 ## 执行逻辑
 1. `ingest`：仅抓取视频标题、视频 ID 等元信息，不下载完整视频。
 2. `subtitle`：优先下载现有字幕或自动字幕文本。
-3. 若有字幕，直接进入 `llm`。
-4. 若无字幕，进入 `asr`，仅下载音频并调用本地 Whisper 转写。
-5. `llm`：调用 DeepSeek 将文本整理成博客。
-6. `storage`：把博客落盘并更新任务状态。
+3. `subtitle_clean`：清洗字幕（解析 SRT/VTT 格式，移除时间戳，生成纯文本）。
+4. 若有字幕，直接进入 `llm`（使用清洗后的纯文本）。
+5. 若无字幕，进入 `asr`，仅下载音频并调用本地 Whisper 转写，然后进入 `llm`。
+6. `llm`：调用 DeepSeek 将清洗后的文本整理成博客。
+7. `storage`：把博客落盘并更新任务状态。
+
+> **字幕处理**：所有流水线统一使用 `subtitle_parser.py` 解析字幕，优先生成不含时间戳的纯文本，提升 LLM 阅读体验。可通过 `include_subtitle_time` 参数保留时间戳。
 
 ## 验证建议
 ```bash
