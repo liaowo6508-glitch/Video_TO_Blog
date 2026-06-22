@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 from typing import Optional, Union
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class OutputFormat(BaseModel):
@@ -73,29 +77,60 @@ def load_prompt_config(
     """
     加载提示词配置。
 
-    - 若 ``config_path`` 为 None，优先读取环境变量
-      ``PROMPT_CONFIG_PATH``；若也未设置，返回默认配置。
+    优先级：``config_path`` 参数 > 环境变量 ``PROMPT_CONFIG_PATH``
+    > ``settings.prompt_config_path`` > 默认文件 ``config/prompts.yaml`` > 内置默认值。
+
+    - 若显式指定了配置路径（参数或环境变量）但文件不存在，抛出 ``FileNotFoundError``。
+    - 若完全没配置，则使用内置默认值 ``BlogPromptConfig()``。
     - 若文件存在，以 YAML 格式解析并与默认配置合并（未填字段使用默认值）。
-    - 若文件不存在且非 None，抛出 FileNotFoundError。
     """
     from config.settings import settings
 
     import yaml
 
-    if config_path is None:
-        config_path = getattr(settings, "prompt_config_path", None)
-    if config_path is None:
+    explicit = False
+    if config_path is not None:
+        explicit = True
+    else:
+        config_path = os.environ.get("PROMPT_CONFIG_PATH")
+        if config_path:
+            explicit = True
+        else:
+            config_path = getattr(settings, "prompt_config_path", None)
+            if config_path:
+                explicit = True
+    if not config_path:
         config_path = Path("config/prompts.yaml")
+        explicit = False  # 默认路径若不存在，允许回退到内置默认值
 
     path = Path(config_path)
     if not path.is_absolute():
         path = settings.workspace_dir / path
 
     if not path.exists():
+        if explicit:
+            raise FileNotFoundError(
+                f"Prompt config file not found: {path}. "
+                "请检查 PROMPT_CONFIG_PATH / settings.prompt_config_path 配置。"
+            )
+        logger.warning(
+            "[prompts] 配置文件 %s 不存在，使用内置默认 system_prompt（长度 %d）。"
+            "如需自定义提示词，请在 config/prompts.yaml 中维护。",
+            path,
+            len(BlogPromptConfig().system_prompt),
+        )
         return BlogPromptConfig()
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return BlogPromptConfig(**raw)
+    cfg = BlogPromptConfig(**raw)
+    logger.info(
+        "[prompts] 已加载配置: path=%s system_prompt 长度=%d user_template 长度=%d",
+        path,
+        len(cfg.system_prompt),
+        len(cfg.user_template),
+    )
+    logger.debug("[prompts] system_prompt 前 80 字符: %s", cfg.system_prompt[:80])
+    return cfg
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +147,17 @@ def get_prompt_config(
 
     ``config_path`` 仅在首次调用时生效；后续调用忽略该参数。
     优先级：显式传入 > 环境变量 ``PROMPT_CONFIG_PATH`` > 默认文件 ``config/prompts.yaml`` > 内置默认值。
+
+    如需在运行时重新加载（例如调试提示词），调用 ``reset_prompt_config()`` 清除单例缓存。
     """
     global _default_config
     if _default_config is None:
         _default_config = load_prompt_config(config_path)
     return _default_config
+
+
+def reset_prompt_config() -> None:
+    """清除提示词配置单例缓存。下次调用 ``get_prompt_config()`` 时将重新读盘。"""
+    global _default_config
+    _default_config = None
+    logger.info("[prompts] 已重置提示词配置缓存，下次访问时将重新加载。")

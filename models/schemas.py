@@ -55,6 +55,6 @@ class TaskRead(BaseModel):
     publish_status: str | None = None
     publish_url: str | None = None
     publish_mode: str | None = None
-    publish_payload: dict[str, Any] = Field(default_factory=dict)
+    publish_payload: dict[str, Any] | None = None
     has_subtitle: bool = False
     node_results: dict[str, Any] = Field(default_factory=dict)

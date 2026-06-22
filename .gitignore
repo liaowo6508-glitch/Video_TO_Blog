@@ -1,6 +1,7 @@
 venv/
 .env
 data/results/
+data/blogs/
 __pycache__/
 .cursor/
 data/video_down/

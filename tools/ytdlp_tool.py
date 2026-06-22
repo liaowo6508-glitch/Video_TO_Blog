@@ -81,10 +81,21 @@ class YtDlpTool:
         if cookie_file:
             resolved = settings.resolve_path(cookie_file)
             if resolved.exists():
+                task_log(
+                    "🍪 使用 B站 cookie 文件: %s (长度=%d)",
+                    resolved,
+                    resolved.stat().st_size,
+                )
                 return str(resolved), False
 
         cookies = settings.bilibili_sessdata
         if cookies:
+            preview = (
+                f"{cookies[:4]}...{cookies[-4:]} (len={len(cookies)})"
+                if len(cookies) > 12
+                else f"*** (len={len(cookies)})"
+            )
+            task_log("🍪 使用 B站 SESSDATA 注入 cookie: %s", preview)
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".txt", delete=False
             ) as f:
@@ -93,6 +104,7 @@ class YtDlpTool:
                     f".bilibili.com\tTRUE\t/\tFALSE\t0\tSESSDATA\t{cookies}\n"
                 )
             return f.name, True
+        task_log("🍪 未配置 B站 cookie / SESSDATA,使用匿名请求")
         return None, False
 
     def extract_info(self, url: str) -> dict:

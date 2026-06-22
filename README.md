@@ -79,16 +79,16 @@ sudo apt install -y ffmpeg
 ```bash
 DEEPSEEK_API_KEY=your_deepseek_api_key
 BILIBILI_SESSDATA=optional_bilibili_sessdata
-BILIBILI_COOKIE_FILE=optional_path_to_cookies_txt
+# BILIBILI_COOKIE_FILE=  # 推荐填写浏览器导出的 Netscape cookies.txt 路径
 BILIBILI_NO_PROXY=false
 APP_HOST=0.0.0.0
 APP_PORT=8000
-DEEPSEEK_MODEL=deepseek-chat
-PROMPT_CONFIG_PATH=optional_path_to_prompts_yaml  # 默认 config/prompts.yaml
-ASR_PROVIDER=local_whisper       # 默认：本地 Whisper，不需要外网
-LOCAL_WHISPER_MODEL=small        # 可选：tiny/base/small/medium/large-v3
-FFMPEG_LOCATION=optional_path_to_ffmpeg_bin_dir_or_binary
-VIDEO_DOWN_MAX_KEEP=5            # video_down 最多保留最近 N 个任务目录
+DEEPSEEK_MODEL=deepseek-v4-pro   # 可选: deepseek-v4-pro / deepseek-v4-flash
+# PROMPT_CONFIG_PATH=            # 自定义提示词路径，留空走 config/prompts.yaml
+ASR_PROVIDER=local_whisper        # 本地 Whisper 转写
+LOCAL_WHISPER_MODEL=small         # tiny/base/small/medium/large-v3
+# FFMPEG_LOCATION=                # 自定义 ffmpeg 路径
+VIDEO_DOWN_MAX_KEEP=5
 ```
 
 说明：
@@ -113,6 +113,8 @@ B站视频 URL 中常携带来源追踪参数（`?spm_id_from=...&vd_source=...`
 ```bash
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+> **提示**：服务端口默认 `8000`，可替换为其他端口。`run.py` 可通过 `--port` 参数匹配对应端口。
 
 启动后可访问：
 - `GET /healthz`
@@ -155,13 +157,22 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 python run.py
+# 或指定端口和地址
+python run.py --port 9000
+python run.py -p 9000 -H 192.168.1.100
 ```
+
+> `run.py` 支持以下参数：
+> - `-p, --port PORT` 服务器端口号 (默认: 8000)
+> - `-H, --host HOST` 服务器地址 (默认: 127.0.0.1)
+> - `-h, --help` 显示帮助信息
 
 输入示例：
 
 ```
 请输入视频 URL，提交后会继续等待下一条输入。
 输入 exit、quit、按 Ctrl+D，或按 Ctrl+C 可退出。
+当前连接: http://127.0.0.1:8000
 URL > https://www.bilibili.com/video/BV1xfczzgEsR
 任务已创建: task_id=a1b2c3d4-...  status=pending
 查询命令: curl http://127.0.0.1:8000/tasks/a1b2c3d4-...
@@ -272,6 +283,23 @@ system_prompt: |
 ```
 
 配置修改后，下次任务执行时自动生效，无需重启服务。
+
+## DeepSeek 模型
+
+平台默认使用 DeepSeek V4 Preview 系列。模型名、上下文与价格（截至 2026-06）：
+
+| 模型 | 上下文 | 特点 | 适用场景 |
+|------|--------|------|----------|
+| `deepseek-v4-pro` | 1M tokens | 1.6T 参数 (49B active) MoE，前沿推理 | 长上下文、复杂编码、多步规划 |
+| `deepseek-v4-flash` | 1M tokens | 284B 参数 (13B active) MoE，高性价比 | 大批量、低延迟日常任务 |
+
+**Thinking Mode**：V4 系列原生支持 thinking 模式（默认开启），可通过 `extra_body` 控制：
+- `extra_body={"thinking": {"type": "disabled"}}` 关闭 thinking
+- `extra_body={"reasoning_effort": "high" / "max"}` 控制推理强度
+
+本平台默认走 V4 模型自带的 thinking 行为。如需在节点代码中显式控制，参考 `tools/llm_tool.py:DeepSeekLLMService.generate` 的 `thinking_enabled` / `reasoning_effort` 参数（仅对 V4 模型生效）。
+
+**旧别名**：DeepSeek 在 2026-04-24 上线 V4 系列；旧别名 `deepseek-chat` / `deepseek-reasoner` 当前仍可用作兼容垫片，但将于 **2026-07-24 15:59 UTC** 弃用，届时将路由失败。建议尽早迁移到 V4 模型名。
 
 ## 执行逻辑
 1. `ingest`：仅抓取视频标题、视频 ID 等元信息，不下载完整视频。

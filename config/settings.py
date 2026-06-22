@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     local_whisper_model: str = "small"
     groq_model: str = "whisper-large-v3-turbo"
     llm_provider: str = "deepseek"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-v4-pro"  # DeepSeek V4 Preview: 1.6T/49B-active MoE, 1M context
     deepseek_base_url: str = "https://api.deepseek.com"
 
     groq_api_key: str | None = None

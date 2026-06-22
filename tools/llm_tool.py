@@ -17,6 +17,8 @@ class LLMService(ABC):
         max_tokens: Optional[int] = None,
         json_mode: bool = False,
         json_schema: Optional[str] = None,
+        thinking_enabled: Optional[bool] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         ...
 
@@ -45,6 +47,8 @@ class DeepSeekLLMService(LLMService):
         max_tokens: Optional[int] = None,
         json_mode: bool = False,
         json_schema: Optional[str] = None,
+        thinking_enabled: Optional[bool] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         if not settings.deepseek_api_key:
             raise EnvironmentError("DEEPSEEK_API_KEY is not set")
@@ -78,6 +82,22 @@ class DeepSeekLLMService(LLMService):
             kwargs["temperature"] = temperature
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+
+        # DeepSeek V4 系列（v4-pro / v4-flash）支持 Thinking Mode：
+        # - 默认开启 thinking；可通过 extra_body={"thinking": {"type": "enabled/disabled"}} 显式控制
+        # - reasoning_effort 可选 "high" / "max"（None 时使用服务端默认）
+        # 旧别名（deepseek-chat / deepseek-reasoner）不支持这两个参数。
+        if self.model.startswith("deepseek-v4") and (
+            thinking_enabled is not None or reasoning_effort is not None
+        ):
+            extra_body: dict[str, object] = {}
+            if thinking_enabled is not None:
+                extra_body["thinking"] = {
+                    "type": "enabled" if thinking_enabled else "disabled"
+                }
+            if reasoning_effort is not None:
+                extra_body["reasoning_effort"] = reasoning_effort
+            kwargs["extra_body"] = extra_body
 
         response = self.client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""
