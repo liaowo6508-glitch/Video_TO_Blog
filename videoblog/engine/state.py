@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, TypedDict
+
+
+class PipelineStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class PipelineState(TypedDict, total=False):
+    task_id: str
+    video_url: str
+    pipeline_type: str
+    created_at: str
+    updated_at: str
+
+    video_id: str | None
+    video_title: str
+
+    cleaned_subtitle_text: str | None
+    subtitle_document_path: str | None
+
+    source_text: str | None
+    blog_content: str | None
+    article_title: str | None
+    output_path: str | None
+
+    has_subtitle: bool
+    status: PipelineStatus
+    error: str | None
+    node_results: dict[str, Any]

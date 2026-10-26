@@ -1,10 +1,10 @@
 venv/
+# 含密钥，不要提交
+config.ini
 .env
-data/results/
-data/blogs/
-**/__pycache__/
+# Python 缓存
+__pycache__/
+*.pyc
 .cursor/
-data/video_down/
-data/tasks/*.json
-data/subtitles/
-data/videos/
+# 运行产物
+data/
